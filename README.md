@@ -1,6 +1,6 @@
-# Bridge Damage Assessment & Repair Priority Scoring System v0.3
+# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.3
 
-**Automated Bridge Damage Analysis with Progressive VLM Fine-Tuning (LLaVA-1.5-7B)**
+**Progressive Fine-Tuning of LLaVA-1.5-7B for Bridge Damage Analysis and Repair Priority Scoring**
 
 [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.6.0-red.svg)](https://pytorch.org/)
