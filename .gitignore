@@ -1,0 +1,144 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# PyCharm
+.idea/
+
+.venv-vlm/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# データ（大容量ファイルは除外）
+data/backup_zip_file/
+data/image_text_inspect_n10789/rank_c_images_n10789/
+data/image_text_inspect_n10789/master/
+data/outputs/BAK_checkpoint/
+data/outputs/Log_OLD/
+data/outputs/checkpoint/
+data/outputs/archive_premerge_*/
+data/preprocessed_640x480_n10789/
+data/preprocessed_640x480_n50/
+data/preprocessed/*.png
+data/preprocessed/*.jpg
+data/outputs/descriptions/*.txt
+data/outputs/structured/*.json
+data/outputs/scores/*.json
+data/rebar_exposure_n254/
+# Exclude CSV except quantization results
+*.csv
+!llava_quantization*.csv
+*.xlsx
+
+# モデル（重いので除外）
+models/
+*.pkl
+*.pt
+*.pth
+*.bin
+*.h5
+*.gguf
+*.ggml
+
+# 画像データ（大容量のため除外）
+# Raw image data excluded, but keep quantization result plots
+data/images_human_inspect_n254/*.png
+data/images_human_inspect_n254/*.jpg
+data/preprocessed/
+# Allow quantization comparison plots
+!llava_quantization*.png
+!*_statistical_analysis.png
+
+# Concept notes and design documents
+docs/ConceptNote_*.jpg
+docs/ConceptNote_*.png
+
+# 出力結果（オプション: サンプルのみコミット可）
+data/outputs/descriptions/
+data/outputs/structured/
+data/outputs/scores/
+data/outputs/*.csv
+data/outputs/*.json
+
+# ログ
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 一時ファイル
+*.tmp
+*.temp
+*.swp
+*.bak
+
+# HuggingFace cache
+.cache/
+huggingface/
+models/.cache/
+
+# v0.3 Fine-tuning data (work in progress, exclude datasets but keep report)
+data/v03_fine_tuning/*.csv
+data/v03_fine_tuning/*.html
+data/v03_fine_tuning/*.json
+data/v03_fine_tuning/annotation*.md
+data/v03_fine_tuning/evaluations/
+data/v03_fine_tuning/reports/
+!data/v03_fine_tuning/dataset_preparation_report.md
+
+# Ollama cache
+.ollama/
+
+# llama-cpp cache
+.llama_cache/
+
+# PyTorch
+.pytorch_cache/
+
+# Backup logs
+0_LogBAK
+
+# Failed implementations archive
+failed/
+
+paper_damage_vlm/
+
+docs/

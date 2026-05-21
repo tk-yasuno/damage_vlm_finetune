@@ -1,0 +1,46 @@
+# 損傷読解スコアリングシステム依存関係
+# Python 3.10以上が必要
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+accelerate>=0.24.0
+bitsandbytes>=0.41.0  # 量子化サポート
+
+# Vision & Image Processing
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+Pillow>=10.0.0
+scikit-image>=0.21.0
+
+# LLM / Vision-Language Models
+llama-cpp-python==0.2.90  # CUDA対応版（GPU使用）
+
+# NLP
+sentencepiece>=0.1.99
+protobuf>=4.24.0
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+pyyaml>=6.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+pygam>=0.9.0  # GAMスコアリング用
+
+# Jupyter
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+tqdm>=4.65.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Optional: Object Detection & Segmentation
+# segment-anything>=1.0  # SAM3サポート（オプション）
+# ultralytics>=8.0.0  # YOLOv8（オプション）
