@@ -1,4 +1,4 @@
-# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.3
+# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.4
 
 **Progressive Fine-Tuning of LLaVA-1.5-7B for Bridge Damage Analysis and Repair Priority Scoring**
 
@@ -16,6 +16,7 @@
 - [v0.1 Achievements](#v01-achievements)
 - [v0.2: Quantization Comparison](#-v02-quantization-comparison-study)
 - [v0.3: Dataset Preparation & Fine-Tuning](#-v03-dataset-preparation--progressive-fine-tuning)
+- [v0.4: QLoRA Progressive Training](#-v04-qlora-progressive-training)
 - [Performance Metrics](#performance-metrics)
 - [Setup](#setup)
 - [Usage](#usage)
@@ -463,6 +464,123 @@ rank_c_images_n10789/IMG_0001.jpg,"床版下面に顕著なひび割れ...",床�
 
 ### v0.4-v0.6 Roadmap (Next Phases)
 
+---
+
+## 🎓 v0.4: QLoRA Progressive Training
+
+### Status: ✅ Complete
+
+**Completion Date**: 2026-05-23  
+**Training Period**: 2026-05-22 01:59 - 2026-05-23 00:17 (Total: ~15 hours)
+
+### Objective
+
+Execute **progressive QLoRA fine-tuning** of LLaVA-1.5-7B across four dataset scales (1k, 2k, 3k, 4k samples) to measure dataset size impact on model performance and identify the optimal training data volume.
+
+### Training Results Summary
+
+| Stage | Dataset | Training Time | Train/Val Samples | **Final Val Loss** | **Best Checkpoint** | Loss Improvement |
+|-------|---------|---------------|-------------------|-------------------|---------------------|------------------|
+| **v0.4.1** | 1k | 1:22:57 | 799 / 200 | **3.135** | checkpoint-100 | - (baseline) |
+| **v0.4.2** | 2k | 2:55:37 | 1,599 / 400 | **3.073** | checkpoint-300 | ↓ 1.98% |
+| **v0.4.3** | 3k | 4:31:44 | 2,398 / 600 | **3.073** | checkpoint-400 | ↔ 0.00% |
+| **v0.4.4** | 4k | 6:19:10 | 3,196 / 799 | **3.067** | checkpoint-600 | ↓ 0.20% |
+
+### Key Findings
+
+1. **Performance Plateau at 2k-3k Range**
+   - Significant improvement from 1k→2k (+1.98%)
+   - Plateau at 2k→3k (0% improvement)
+   - Marginal improvement at 3k→4k (+0.20%)
+
+2. **Optimal Model: 2k Samples (v0.4.2)**
+   - Best cost-benefit ratio: 2.2x faster than 4k for only 0.2% worse loss
+   - Stable training with minimal overfitting
+   - Validation loss: 3.073 (vs 3.067 for 4k)
+
+3. **Diminishing Returns**
+   - Loss convergence confirms limited benefit beyond 2k samples
+   - Training time scales approximately linearly with data size
+   - Resource efficiency decreases significantly after 2k
+
+### Training Configuration
+
+```yaml
+Base Model: llava-hf/llava-1.5-7b-hf
+Quantization: 4-bit NF4 with double quantization
+
+LoRA Parameters:
+  rank: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules: [q_proj, v_proj, k_proj, o_proj, gate_proj, up_proj, down_proj]
+
+Training Hyperparameters:
+  batch_size: 4
+  gradient_accumulation_steps: 4  # Effective batch size: 16
+  learning_rate: 2e-4
+  num_epochs: 3
+  warmup_steps: 50
+  max_grad_norm: 1.0
+  weight_decay: 0.01
+  optimizer: AdamW
+  lr_scheduler: cosine
+  mixed_precision: fp16
+
+Hardware:
+  GPU: NVIDIA GeForce RTX 4060 Ti 16GB
+  CUDA: 12.4
+  PyTorch: 2.6.0
+```
+
+### Loss Convergence Visualization
+
+```
+Validation Loss
+3.14 ┤
+     │ 1k ●
+3.12 ┤     ╲
+     │      ╲
+3.10 ┤       ╲ 2k ●━━━━━━━━━━━━●━━━━● (plateau)
+     │              3k            4k
+3.08 ┤
+     │
+3.06 ┤                              ●
+     │                             4k
+     └────────────────────────────────
+      1k    2k    3k    4k
+```
+
+### Model Artifacts
+
+```
+models/
+├── llava_v03_qlora_1k/    # 134.5 MB (v0.4.1) ✅
+├── llava_v03_qlora_2k/    # 134.5 MB (v0.4.2) ✅ Recommended
+├── llava_v03_qlora_3k/    # 134.5 MB (v0.4.3) ✅
+└── llava_v03_qlora_4k/    # 134.5 MB (v0.4.4) ✅
+```
+
+### Detailed Analysis
+
+See [Result_QLoRA_Scale.md](Result_QLoRA_Scale.md) for:
+- Detailed loss curves for all 4 stages
+- Cost-benefit analysis
+- Training time scaling analysis
+- Validation loss stability comparison
+- Recommendations for production deployment
+
+### Documentation
+
+- **Training Script**: [train_v03_qlora.py](train_v03_qlora.py) ✅
+- **Results Report**: [Result_QLoRA_Scale.md](Result_QLoRA_Scale.md) ✅
+- **Setup Guide**: [SETUP_VENV_VLM.md](SETUP_VENV_VLM.md) ✅
+- **Quick Start**: [QUICKSTART_V03_V05.md](QUICKSTART_V03_V05.md) ✅
+
+---
+
+### v0.5-v0.6 Roadmap (Next Phases)
+
 #### Phase 2: v0.4 QLoRA Fine-Tuning (⏳ Pending)
 
 **Script**: `train_v03_qlora.py`
@@ -575,8 +693,8 @@ python create_progressive_training_report.py \
 |-------|--------|-----------------|
 | v0.1: Baseline Pipeline | ✅ Complete | 2025-12 |
 | v0.2: Quantization Study | ✅ Complete | 2026-03 |
-| **v0.3: Dataset Preparation** | **✅ Complete** | **2026-05-22** |
-| v0.4: QLoRA Training | ⏳ Pending | TBD |
+| v0.3: Dataset Preparation | ✅ Complete | 2026-05-22 |
+| **v0.4: QLoRA Training** | **✅ Complete** | **2026-05-23** |
 | v0.5: Evaluation | ⏳ Pending | TBD |
 | v0.6: Paper Writing | ⏳ Pending | TBD |
 
@@ -831,10 +949,10 @@ damage_vlm_finetune/
 │   └── preprocessed_640x480_n10789/  # Preprocessed images
 ├── models/                         # Model files
 │   ├── llava-v1.5-7b-Q5_K_M.gguf   # Base model (v0.2)
-│   ├── llava_v03_qlora_1k/         # v0.4.1 LoRA adapters (pending)
-│   ├── llava_v03_qlora_2k/         # v0.4.2 (pending)
-│   ├── llava_v03_qlora_3k/         # v0.4.3 (pending)
-│   ├── llava_v03_qlora_4k/         # v0.4.4 (pending)
+│   ├── llava_v03_qlora_1k/         # v0.4.1 LoRA adapters ✅
+│   ├── llava_v03_qlora_2k/         # v0.4.2 ✅ Recommended
+│   ├── llava_v03_qlora_3k/         # v0.4.3 ✅
+│   ├── llava_v03_qlora_4k/         # v0.4.4 ✅
 │   └── scoring_rules.yaml          # Rule-based scoring
 ├── src/                            # Source code
 │   ├── preprocessing/              # Image preprocessing
@@ -961,7 +1079,7 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ Statistical analysis and visualization
 - ✅ Recommendation: Q5_K_M optimal for production
 
-#### v0.3 (2026-05-22) **🎉 Latest Release**
+#### v0.3 (2026-05-22)
 - ✅ Dataset preparation pipeline (10,789 images)
 - ✅ Quality filtering (text length, keywords, patterns)
 - ✅ Stratified sampling (component × damage type)
@@ -969,23 +1087,24 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ Fixed test set (800 images)
 - ✅ Comprehensive documentation (setup, quickstart, implementation summary)
 
-### ⏳ In Progress / Planned
+#### v0.4 (2026-05-23) **🎉 Latest Release**
+- ✅ Stage 1: Trained on 1k samples (1:22:57, val_loss=3.135)
+- ✅ Stage 2: Trained on 2k samples (2:55:37, val_loss=3.073)
+- ✅ Stage 3: Trained on 3k samples (4:31:44, val_loss=3.073)
+- ✅ Stage 4: Trained on 4k samples (6:19:10, val_loss=3.067)
+- ✅ Generated LoRA adapters for all 4 stages (134.5 MB each)
+- ✅ Identified optimal model: 2k samples (best cost-benefit)
+- ✅ Comprehensive training analysis report (Result_QLoRA_Scale.md)
 
-#### v0.4 (2026 Q2) - QLoRA Fine-Tuning
-- [ ] Stage 1: Train on 1k samples (~2-4 hours)
-- [ ] Stage 2: Train on 2k samples (~4-8 hours)
-- [ ] Stage 3: Train on 3k samples (~6-12 hours)
-- [ ] Stage 4: Train on 4k samples (~8-16 hours)
-- [ ] Generate LoRA adapters for all 4 stages
-- [ ] Monitor training metrics (loss, learning rate, GPU utilization)
+### ⏳ In Progress / Planned
 
 #### v0.5 (2026 Q2) - Vector Similarity Evaluation
 - [ ] Implement inference pipeline for fine-tuned models
-- [ ] Run evaluation on fixed test set (800 images)
-- [ ] Compute cosine similarity scores
+- [ ] Run evaluation on fixed test set (800 images) for all 4 models
+- [ ] Compute cosine similarity scores (Sentence-BERT)
 - [ ] Generate progressive training comparison report
-- [ ] Statistical significance testing (paired t-test)
-- [ ] Identify optimal dataset size
+- [ ] Statistical significance testing (Mann-Whitney U test)
+- [ ] Identify optimal dataset size based on test set performance
 
 #### v0.6 (2026 Q3) - Academic Paper
 - [ ] Write methodology section (dataset, QLoRA, evaluation)
