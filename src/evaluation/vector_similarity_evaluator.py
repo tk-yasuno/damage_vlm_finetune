@@ -306,7 +306,8 @@ class VectorSimilarityEvaluator:
         report += "\n## Performance Improvement\n\n"
         if len(results_list) > 1:
             baseline_mean = results_list[0][1]['overall_metrics']['cosine_similarity']['mean']
-            report += f"Baseline ({}): {baseline_mean:.4f}\n\n".format(results_list[0][0])
+            baseline_name = results_list[0][0]
+            report += f"Baseline ({baseline_name}): {baseline_mean:.4f}\n\n"
             
             for stage_name, results in results_list[1:]:
                 current_mean = results['overall_metrics']['cosine_similarity']['mean']

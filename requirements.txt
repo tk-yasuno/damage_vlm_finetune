@@ -7,6 +7,9 @@ torchvision>=0.15.0
 transformers>=4.35.0
 accelerate>=0.24.0
 bitsandbytes>=0.41.0  # 量子化サポート
+peft>=0.11.0  # Parameter-Efficient Fine-Tuning (LoRA)
+datasets>=2.14.0  # HuggingFace Datasets
+tensorboard>=2.14.0  # 訓練ログの可視化
 
 # Vision & Image Processing
 opencv-python>=4.8.0

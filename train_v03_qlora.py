@@ -1,4 +1,4 @@
-"""
+﻿"""
 v0.3-v0.4 QLoRA Fine-Tuning: Progressive Training Script for LLaVA-1.5-7B
 Supports multiple dataset sizes (1k/2k/3k/4k) with CLI arguments
 """
@@ -97,31 +97,37 @@ class TrainingConfig:
         # Extract v04 fine-tuning config
         v04_config = config_dict.get('v04_fine_tuning', {})
         
+        # Default target modules
+        default_target_modules = [
+            "q_proj", "v_proj", "k_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj"
+        ]
+        
         # Create instance with defaults from YAML
         instance = cls(
-            base_model_id=v04_config.get('base_model_id', cls.base_model_id),
-            lora_r=v04_config.get('lora', {}).get('r', cls.lora_r),
-            lora_alpha=v04_config.get('lora', {}).get('alpha', cls.lora_alpha),
-            lora_dropout=v04_config.get('lora', {}).get('dropout', cls.lora_dropout),
-            target_modules=v04_config.get('lora', {}).get('target_modules', cls.target_modules),
-            batch_size=v04_config.get('training', {}).get('batch_size', cls.batch_size),
-            gradient_accumulation_steps=v04_config.get('training', {}).get('gradient_accumulation_steps', cls.gradient_accumulation_steps),
-            learning_rate=v04_config.get('training', {}).get('learning_rate', cls.learning_rate),
-            num_epochs=v04_config.get('training', {}).get('num_epochs', cls.num_epochs),
-            warmup_steps=v04_config.get('training', {}).get('warmup_steps', cls.warmup_steps),
-            max_grad_norm=v04_config.get('training', {}).get('max_grad_norm', cls.max_grad_norm),
-            weight_decay=v04_config.get('training', {}).get('weight_decay', cls.weight_decay),
-            optim=v04_config.get('training', {}).get('optim', cls.optim),
-            lr_scheduler_type=v04_config.get('training', {}).get('lr_scheduler_type', cls.lr_scheduler_type),
-            fp16=v04_config.get('training', {}).get('fp16', cls.fp16),
-            bf16=v04_config.get('training', {}).get('bf16', cls.bf16),
-            logging_steps=v04_config.get('training', {}).get('logging_steps', cls.logging_steps),
-            save_steps=v04_config.get('training', {}).get('save_steps', cls.save_steps),
-            eval_steps=v04_config.get('training', {}).get('eval_steps', cls.eval_steps),
-            save_total_limit=v04_config.get('training', {}).get('save_total_limit', cls.save_total_limit),
-            max_seq_length=v04_config.get('data', {}).get('max_seq_length', cls.max_seq_length),
-            train_split=v04_config.get('data', {}).get('train_split', cls.train_split),
-            image_base_dir=config_dict.get('v03_dataset', {}).get('image_dir', cls.image_base_dir)
+            base_model_id=v04_config.get('base_model_id', "llava-hf/llava-1.5-7b-hf"),
+            lora_r=v04_config.get('lora', {}).get('r', 32),
+            lora_alpha=v04_config.get('lora', {}).get('alpha', 64),
+            lora_dropout=v04_config.get('lora', {}).get('dropout', 0.05),
+            target_modules=v04_config.get('lora', {}).get('target_modules', default_target_modules),
+            batch_size=v04_config.get('training', {}).get('batch_size', 4),
+            gradient_accumulation_steps=v04_config.get('training', {}).get('gradient_accumulation_steps', 4),
+            learning_rate=v04_config.get('training', {}).get('learning_rate', 2e-4),
+            num_epochs=v04_config.get('training', {}).get('num_epochs', 3),
+            warmup_steps=v04_config.get('training', {}).get('warmup_steps', 50),
+            max_grad_norm=v04_config.get('training', {}).get('max_grad_norm', 1.0),
+            weight_decay=v04_config.get('training', {}).get('weight_decay', 0.01),
+            optim=v04_config.get('training', {}).get('optim', "adamw_torch"),
+            lr_scheduler_type=v04_config.get('training', {}).get('lr_scheduler_type', "cosine"),
+            fp16=v04_config.get('training', {}).get('fp16', True),
+            bf16=v04_config.get('training', {}).get('bf16', False),
+            logging_steps=v04_config.get('training', {}).get('logging_steps', 10),
+            save_steps=v04_config.get('training', {}).get('save_steps', 100),
+            eval_steps=v04_config.get('training', {}).get('eval_steps', 100),
+            save_total_limit=v04_config.get('training', {}).get('save_total_limit', 3),
+            max_seq_length=v04_config.get('data', {}).get('max_seq_length', 2048),
+            train_split=v04_config.get('data', {}).get('train_split', 0.8),
+            image_base_dir=config_dict.get('v03_dataset', {}).get('image_dir', "data/image_text_inspect_n10789/rank_c_images_n10789")
         )
         
         # Override with CLI arguments
@@ -358,7 +364,7 @@ def train(config: TrainingConfig):
         save_steps=config.save_steps,
         eval_steps=config.eval_steps,
         save_total_limit=config.save_total_limit,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         save_strategy="steps",
         load_best_model_at_end=True,
         metric_for_best_model="loss",
@@ -443,255 +449,6 @@ def main():
     config = TrainingConfig.from_config_and_args(args.config, args)
     
     # Train
-    train(config)
-
-
-if __name__ == "__main__":
-    main()
-        """Load annotated data"""
-        with open(self.annotation_file, 'r', encoding='utf-8') as f:
-            annotations = json.load(f)
-        
-        # Filter only annotated samples (quality score > 4.0)
-        filtered = []
-        for ann in annotations:
-            gt = ann.get('ground_truth', {})
-            if gt.get('description') and gt.get('quality_score', 0) >= 4.0:
-                filtered.append(ann)
-        
-        print(f"✓ Loaded {len(filtered)} high-quality annotations (score ≥ 4.0)")
-        return filtered
-    
-    def create_huggingface_dataset(self, processor: AutoProcessor) -> Dataset:
-        """Create HuggingFace dataset"""
-        
-        dataset_dict = {
-            "image": [],
-            "text": [],
-            "image_path": []
-        }
-        
-        for ann in self.data:
-            image_path = self.image_dir / ann['image']
-            if not image_path.exists():
-                print(f"Warning: Image not found: {image_path}")
-                continue
-            
-            # Load image
-            try:
-                image = Image.open(image_path).convert('RGB')
-            except Exception as e:
-                print(f"Error loading {image_path}: {e}")
-                continue
-            
-            # Create training prompt
-            gt = ann['ground_truth']
-            prompt = "USER: <image>\nDescribe the damage visible in this bridge structure image in detail. Include damage types, severity, location, and extent.\nASSISTANT:"
-            response = gt['description']
-            full_text = f"{prompt} {response}"
-            
-            dataset_dict["image"].append(image)
-            dataset_dict["text"].append(full_text)
-            dataset_dict["image_path"].append(str(image_path))
-        
-        print(f"✓ Created dataset with {len(dataset_dict['image'])} samples")
-        return Dataset.from_dict(dataset_dict)
-
-
-def setup_qlora_model(model_id: str, config: TrainingConfig):
-    """Setup model with QLoRA"""
-    
-    print(f"\n📦 Loading base model: {model_id}")
-    
-    # Load model with 4-bit quantization
-    from transformers import BitsAndBytesConfig
-    
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16
-    )
-    
-    model = LlavaForConditionalGeneration.from_pretrained(
-        model_id,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.float16
-    )
-    
-    print("✓ Model loaded with 4-bit quantization")
-    
-    # Prepare for k-bit training
-    model = prepare_model_for_kbit_training(model)
-    
-    # LoRA configuration
-    lora_config = LoraConfig(
-        r=config.lora_r,
-        lora_alpha=config.lora_alpha,
-        target_modules=config.target_modules,
-        lora_dropout=config.lora_dropout,
-        bias="none",
-        task_type="CAUSAL_LM"
-    )
-    
-    model = get_peft_model(model, lora_config)
-    
-    # Print trainable parameters
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"\n📊 Model Parameters:")
-    print(f"  Trainable: {trainable_params:,} ({100 * trainable_params / total_params:.2f}%)")
-    print(f"  Total: {total_params:,}")
-    
-    return model
-
-
-def collate_fn(batch, processor):
-    """Custom collate function for batching"""
-    images = [item['image'] for item in batch]
-    texts = [item['text'] for item in batch]
-    
-    # Process images and text
-    inputs = processor(
-        text=texts,
-        images=images,
-        padding=True,
-        truncation=True,
-        max_length=2048,
-        return_tensors="pt"
-    )
-    
-    # Prepare labels (same as input_ids for causal LM)
-    inputs["labels"] = inputs["input_ids"].clone()
-    
-    return inputs
-
-
-def train(config: TrainingConfig):
-    """Main training function"""
-    
-    print("=" * 70)
-    print("LLaVA v0.3 QLoRA Fine-Tuning")
-    print("=" * 70)
-    print()
-    
-    # Create output directory
-    os.makedirs(config.output_dir, exist_ok=True)
-    
-    # Load processor
-    print("📝 Loading processor...")
-    processor = AutoProcessor.from_pretrained(config.base_model_id)
-    
-    # Load dataset
-    print("\n📂 Loading dataset...")
-    dataset_handler = LLaVADataset(config.annotation_file)
-    dataset = dataset_handler.create_huggingface_dataset(processor)
-    
-    if len(dataset) == 0:
-        print("❌ No annotated samples found. Please annotate data first.")
-        print("   Run: python prepare_v03_dataset.py")
-        print("   Then annotate using the HTML interface")
-        return
-    
-    # Train/validation split
-    split = dataset.train_test_split(test_size=1 - config.train_split, seed=42)
-    train_dataset = split['train']
-    val_dataset = split['test']
-    
-    print(f"  Training samples: {len(train_dataset)}")
-    print(f"  Validation samples: {len(val_dataset)}")
-    
-    # Setup model
-    model = setup_qlora_model(config.base_model_id, config)
-    
-    # Training arguments
-    training_args = TrainingArguments(
-        output_dir=config.output_dir,
-        num_train_epochs=config.num_epochs,
-        per_device_train_batch_size=config.batch_size,
-        per_device_eval_batch_size=config.batch_size,
-        gradient_accumulation_steps=config.gradient_accumulation_steps,
-        learning_rate=config.learning_rate,
-        warmup_steps=config.warmup_steps,
-        logging_steps=config.logging_steps,
-        save_steps=config.save_steps,
-        eval_steps=config.eval_steps,
-        evaluation_strategy="steps",
-        save_strategy="steps",
-        load_best_model_at_end=True,
-        metric_for_best_model="loss",
-        greater_is_better=False,
-        fp16=config.fp16,
-        bf16=config.bf16,
-        optim=config.optim,
-        lr_scheduler_type=config.lr_scheduler_type,
-        weight_decay=config.weight_decay,
-        max_grad_norm=config.max_grad_norm,
-        remove_unused_columns=False,
-        report_to="none",  # Disable wandb/tensorboard for now
-        push_to_hub=False
-    )
-    
-    # Trainer
-    from functools import partial
-    collate_fn_with_processor = partial(collate_fn, processor=processor)
-    
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=collate_fn_with_processor
-    )
-    
-    # Training
-    print("\n🚀 Starting training...")
-    print(f"  Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
-    print(f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB" if torch.cuda.is_available() else "")
-    print()
-    
-    trainer.train()
-    
-    # Save final model
-    print("\n💾 Saving model...")
-    model.save_pretrained(config.output_dir)
-    processor.save_pretrained(config.output_dir)
-    
-    # Save configuration
-    config_path = Path(config.output_dir) / "training_config.json"
-    with open(config_path, 'w') as f:
-        json.dump({
-            "base_model_id": config.base_model_id,
-            "lora_r": config.lora_r,
-            "lora_alpha": config.lora_alpha,
-            "learning_rate": config.learning_rate,
-            "num_epochs": config.num_epochs,
-            "train_samples": len(train_dataset),
-            "val_samples": len(val_dataset),
-            "training_date": datetime.now().isoformat()
-        }, f, indent=2)
-    
-    print(f"✅ Training complete! Model saved to: {config.output_dir}")
-    print(f"\n📝 Next steps:")
-    print(f"  1. Run evaluation: python evaluate_v03_model.py")
-    print(f"  2. Compare with v0.2 baseline")
-    print(f"  3. Merge adapters (optional): python merge_v03_adapters.py")
-
-
-def main():
-    """Entry point"""
-    
-    # Check if annotations exist
-    config = TrainingConfig()
-    
-    if not Path(config.annotation_file).exists():
-        print(f"❌ Annotation file not found: {config.annotation_file}")
-        print("\n🚀 Run data preparation first:")
-        print("   python prepare_v03_dataset.py")
-        return
-    
-    # Start training
     train(config)
 
 

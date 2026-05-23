@@ -1,0 +1,187 @@
+# Bridge Damage VLM Fine-Tuning Configuration
+# v0.3-v0.6 Unified Configuration
+
+# ============================================================================
+# v0.3: Dataset Preparation
+# ============================================================================
+v03_dataset:
+  master_excel: "data/image_text_inspect_n10789/Rank_c_image_text_n10789.xlsx"
+  image_dir: "data/image_text_inspect_n10789/rank_c_images_n10789"
+  v02_detail_csv: "llava_quantization_comparison_detail.csv"
+  output_dir: "data/v03_fine_tuning"
+  
+  # Quality filtering
+  filters:
+    min_text_length: 15
+    max_text_length: 500
+    excluded_patterns:
+      - '^\s*$'              # Empty
+      - '^\s*[？?]+\s*$'     # Question marks only
+      - '^\s*[-ー]+\s*$'     # Dashes only
+      - '^\s*なし\s*$'       # "なし" (none)
+      - '^\s*該当なし\s*$'   # "該当なし" (not applicable)
+    required_keywords:
+      - 'ひび割れ'
+      - 'クラック'
+      - '亀裂'
+      - '鉄筋'
+      - '露出'
+      - '腐食'
+      - '錆'
+      - 'さび'
+      - '剥離'
+      - 'はく離'
+      - '剥落'
+      - '欠損'
+      - '劣化'
+      - '変色'
+      - '漏水'
+      - '桁'
+      - '床版'
+      - '支承'
+      - '橋脚'
+      - '橋台'
+      - '高欄'
+      - '伸縮装置'
+      - '主桁'
+      - '横桁'
+      - '対傾構'
+      - 'コンクリート'
+      - '鋼材'
+      - '塗装'
+      - '著しい'
+      - '顕著'
+      - '大きな'
+      - '小規模'
+      - '軽微'
+      - '進行'
+  
+  # Sampling strategy
+  test_size: 800
+  train_sizes: [1000, 2000, 3000, 4000]
+  random_seed: 42
+  stratification:
+    enabled: true
+    strata_columns: ['component_type', 'damage_type']
+
+# ============================================================================
+# v0.4: QLoRA Fine-Tuning
+# ============================================================================
+v04_fine_tuning:
+  # Base model
+  base_model_id: "llava-hf/llava-1.5-7b-hf"
+  
+  # LoRA configuration
+  lora:
+    r: 32                    # LoRA rank
+    alpha: 64                # LoRA alpha (scaling factor)
+    dropout: 0.05            # LoRA dropout
+    target_modules:
+      - "q_proj"
+      - "v_proj"
+      - "k_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  
+  # Quantization configuration (4-bit)
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_use_double_quant: true
+  
+  # Training hyperparameters
+  training:
+    batch_size: 4
+    gradient_accumulation_steps: 4  # Effective batch size: 16
+    learning_rate: 2.0e-4
+    num_epochs: 3
+    warmup_steps: 50
+    max_grad_norm: 1.0
+    weight_decay: 0.01
+    
+    # Optimizer
+    optim: "adamw_torch"
+    lr_scheduler_type: "cosine"
+    
+    # Mixed precision
+    fp16: true
+    bf16: false
+    
+    # Logging and checkpointing
+    logging_steps: 10
+    save_steps: 100
+    eval_steps: 100
+    save_total_limit: 3
+  
+  # Data
+  data:
+    max_seq_length: 2048
+    train_split: 0.8
+    image_base_dir: "data/image_text_inspect_n10789/rank_c_images_n10789"
+  
+  # Output directories
+  output:
+    base_dir: "models"
+    run_name: "llava_v03_qlora"
+    logging_dir: "logs"
+
+# ============================================================================
+# v0.5: Vector Similarity Evaluation
+# ============================================================================
+v05_evaluation:
+  # Sentence-BERT model for Japanese
+  model:
+    name: "sonoisa/sentence-bert-base-ja-mean-tokens-v2"
+    device: "cuda"
+    batch_size: 32
+  
+  # Evaluation metrics
+  metrics:
+    - "cosine_similarity"
+    - "euclidean_distance"
+    - "manhattan_distance"
+  
+  # Quality thresholds (cosine similarity)
+  thresholds:
+    excellent: 0.85
+    good: 0.75
+    acceptable: 0.65
+    poor: 0.50
+  
+  # Output
+  output_dir: "data/v03_fine_tuning/evaluations"
+  report_dir: "data/v03_fine_tuning/reports"
+
+# ============================================================================
+# v0.6: Academic Paper
+# ============================================================================
+v06_paper:
+  # LaTeX configuration
+  latex_dir: "paper_damage_vlm/0_Format_arXiv_pdfLaTex"
+  figures_dir: "paper_damage_vlm/0_Format_arXiv_pdfLaTex/figures"
+  
+  # Sections to generate
+  sections:
+    - "methodology"
+    - "results"
+    - "discussion"
+  
+  # Figure generation
+  figures:
+    dpi: 300
+    format: "png"
+    style: "seaborn-v0_8-paper"
+
+# ============================================================================
+# General Settings
+# ============================================================================
+general:
+  cache_dir: ".cache"
+  seed: 42
+  device: "cuda"
+  num_workers: 4
