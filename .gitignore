@@ -122,6 +122,11 @@ data/v03_fine_tuning/*.json
 data/v03_fine_tuning/annotation*.md
 data/v03_fine_tuning/evaluations/
 data/v03_fine_tuning/reports/
+# Inference results contain bridge names (PII) - must not be committed
+data/v03_fine_tuning/evaluations/inference_results_1k.csv
+data/v03_fine_tuning/evaluations/inference_results_2k.csv
+data/v03_fine_tuning/evaluations/inference_results_3k.csv
+data/v03_fine_tuning/evaluations/inference_results_4k.csv
 !data/v03_fine_tuning/dataset_preparation_report.md
 
 # Ollama cache
