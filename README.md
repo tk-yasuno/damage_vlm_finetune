@@ -1,6 +1,6 @@
-# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.5.1
+# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.6.3
 
-**Progressive Fine-Tuning of LLaVA-1.5-7B for Bridge Damage Analysis and Repair Priority Scoring**
+**Progressive Fine-Tuning of LLaVA-1.5-7B with Quality Guard Agent for Bridge Damage Analysis and Repair Priority Scoring**
 
 [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.6.0-red.svg)](https://pytorch.org/)
@@ -18,6 +18,7 @@
 - [v0.3: Dataset Preparation & Fine-Tuning](#-v03-dataset-preparation--progressive-fine-tuning)
 - [v0.4: QLoRA Progressive Training](#-v04-qlora-progressive-training)
 - [v0.5.1: Model Evaluation & Visualization](#-v051-model-evaluation--visualization)
+- [v0.6.3: Quality Guard Agent & Full Pipeline](#-v063-quality-guard-agent--full-pipeline-evaluation)
 - [Performance Metrics](#performance-metrics)
 - [Setup](#setup)
 - [Usage](#usage)
@@ -863,15 +864,113 @@ python create_progressive_training_report.py \
 | v0.1: Baseline Pipeline | ✅ Complete | 2025-12 |
 | v0.2: Quantization Study | ✅ Complete | 2026-03 |
 | v0.3: Dataset Preparation | ✅ Complete | 2026-05-22 |
-| **v0.4: QLoRA Training** | **✅ Complete** | **2026-05-23** |
-| v0.5: Evaluation | ⏳ Pending | TBD |
-| v0.6: Paper Writing | ⏳ Pending | TBD |
+| v0.4: QLoRA Training | ✅ Complete | 2026-05-23 |
+| v0.5.1: Evaluation & Visualization | ✅ Complete | 2026-05-24 |
+| **v0.6.3: Quality Guard + Full Pipeline** | **✅ Complete** | **2026-05-25** |
 
 ### Documentation
 
 - **Setup Guide**: [SETUP_VENV_VLM.md](SETUP_VENV_VLM.md) - Virtual environment configuration
 - **Quick Start**: [QUICKSTART_V03_V05.md](QUICKSTART_V03_V05.md) - Step-by-step workflow
 - **Implementation Summary**: [V03_V05_IMPLEMENTATION_SUMMARY.md](V03_V05_IMPLEMENTATION_SUMMARY.md) - Technical details
+
+---
+
+## 🛡️ v0.6.3: Quality Guard Agent & Full Pipeline Evaluation
+
+### Status: ✅ Complete — **🎉 Latest Release**
+
+**Completion Date**: 2026-05-25  
+**Evaluation**: Full n=800 test set (v0.6.3 pipeline, 3k model)
+
+### Overview
+
+v0.6.3 introduces a **two-stage Quality Guard Agent** that filters low-quality VLM outputs before priority scoring, completing the end-to-end production pipeline:
+
+```
+Image → LLaVA-1.5-7B (3k QLoRA) → Quality Guard (Stage 1 + 2) → Priority Scorer → Report
+```
+
+### Quality Guard Agent Architecture
+
+#### Stage 1: Rule-Based Filter (CPU, ~0.01 s/row)
+
+| Rule | Threshold | Reject Code |
+|------|-----------|-------------|
+| Token count below minimum | θ_low = 98 (5th percentile) | `short_description` |
+| Token count above maximum | θ_high = 202 (95th percentile) | `dirty_or_noisy` |
+| Excessive repetition (≥ 3 repeated n-grams) | — | `dirty_or_noisy` |
+| No damage keyword present | — | `dirty_or_noisy` |
+| Image file missing | — | `no_such_file` |
+
+Token counting uses CJK + ASCII tokenization to correctly handle Japanese text.
+
+#### Stage 2: SLM Judge (Swallow-8B NF4, GPU, Unsloth)
+
+Applies natural-language judgement to Stage 1 PASS outputs as a second verification layer. Empirical result: Stage 2 produced **0 additional rejections** for the 3k model — the rule-based Stage 1 alone was sufficient.
+
+### n=800 Evaluation Results
+
+| Metric | Value | % |
+|--------|-------|---|
+| Total images | 800 | 100.0% |
+| **PASS (High Quality)** | **727** | **90.9%** |
+| FAIL — Dirty or Noisy | 36 | 4.5% |
+| FAIL — Short description | 35 | 4.4% |
+| FAIL — No such file | 2 | 0.2% |
+| Stage 2 additional rejections | 0 | — |
+| **End-to-end throughput** | **8.97 s/row** | — |
+| **Total elapsed** | **7,178 s (≈ 2.0 h)** | — |
+
+### Priority Scoring Results (PASS n=727)
+
+| Metric | Value |
+|--------|-------|
+| Priority Level | All Level 3 (100%) |
+| Priority Score | 0.54 (uniform) |
+| Cosine Similarity (median) | 0.705 (Good tier boundary) |
+| Token Count (median) | 120 tokens |
+
+**Finding — Output Mode Collapse**: The 3k model generates near-identical descriptions for all PASS images. Main Girder is mentioned in **100%** of predictions; Rebar Exposure in **99.6%**; Spalling in **98.6%**. This stereotyped output pattern causes uniform priority scores (Level 3 saturation). See [paper_damage_vlm/1_Methodology/methodology.tex](paper_damage_vlm/1_Methodology/methodology.tex) for full analysis.
+
+### Quality Metric Distributions
+
+| Metric | PASS (n=727) | FAIL (n=73) |
+|--------|-------------|-------------|
+| Cosine similarity (median) | **0.705** | 0.659 |
+| Token count (median) | **120** | 97 ≈ θ_low |
+
+The Quality Guard preferentially retains predictions with higher semantic alignment — even though the filter is defined only on output-text properties, it acts as a proxy for semantic quality.
+
+### Key Findings
+
+1. **Stage 1 sufficiency**: The lightweight CPU rule filter achieves the same classification as the full two-stage pipeline for the 3k model and this corpus.
+2. **Output mode collapse**: Fine-tuning on a skewed training corpus causes the model to default to a dominant member–damage template. Requires data balancing or constrained-generation prompts.
+3. **Priority scoring calibration gap**: All 727 PASS samples receive Priority Level 3, indicating the YAML rules need recalibration or VLM prompts need explicit severity keywords.
+4. **Throughput**: 8.97 s/row (batch_size=8, torch.compile()) enables processing of 800 images in ~2 hours on RTX 4060 Ti 16GB.
+
+### Generated Figures
+
+| Figure | Description |
+|--------|-------------|
+| `figures_vlm/10_priority_score_violin.png` | Priority score saturation + PASS vs FAIL cosine similarity + token count violin |
+| `figures_vlm/10_member_damage_analysis.png` | Member/damage frequency bars + co-occurrence heatmap |
+
+### Scripts
+
+- **Pipeline**: `pipeline_v063.py` — Full end-to-end v0.6.3 pipeline
+- **Figure generation**: `create_figures_10.py` — Analysis figures for n=800 results
+- **Output CSV**: `data/v03_fine_tuning/evaluations/v063_scoring_results.csv` (800 rows, 22 columns)
+
+### Paper Status
+
+The academic paper (`paper_damage_vlm/1_Methodology/methodology.tex`) is complete with all v0.6.3 results:
+- Quality Guard Agent methodology section (TikZ algorithm flow diagram)
+- n=800 results tables (tab:qg_final)
+- Output mode collapse analysis (fig:member_damage)
+- Priority scoring distribution (fig:priority_violin)
+- Discussion: Quality Guard efficacy, mode collapse, calibration
+- **25 pages, 10 figures** — compiled with pdflatex (no errors)
 
 ---
 
@@ -1256,7 +1355,7 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ Fixed test set (800 images)
 - ✅ Comprehensive documentation (setup, quickstart, implementation summary)
 
-#### v0.4 (2026-05-23) **🎉 Latest Release**
+#### v0.4 (2026-05-23)
 - ✅ Stage 1: Trained on 1k samples (1:22:57, val_loss=3.135)
 - ✅ Stage 2: Trained on 2k samples (2:55:37, val_loss=3.073)
 - ✅ Stage 3: Trained on 3k samples (4:31:44, val_loss=3.073)
@@ -1265,22 +1364,25 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ Identified optimal model: 2k samples (best cost-benefit)
 - ✅ Comprehensive training analysis report (Result_QLoRA_Scale.md)
 
-### ⏳ In Progress / Planned
+#### v0.5.1 (2026-05-24)
+- ✅ Inference pipeline for all 4 fine-tuned models (inference_v051_qlora.py)
+- ✅ n=800 evaluation with Japanese Sentence-BERT cosine similarity
+- ✅ Inverted-U performance curve: 3k model peaks (mean=0.6909)
+- ✅ 4k overfitting confirmed (−2.5% from 3k)
+- ✅ 5 publication-quality visualization figures
+- ✅ Paper methodology section drafted (v0.5 results)
 
-#### v0.5 (2026 Q2) - Vector Similarity Evaluation
-- [ ] Implement inference pipeline for fine-tuned models
-- [ ] Run evaluation on fixed test set (800 images) for all 4 models
-- [ ] Compute cosine similarity scores (Sentence-BERT)
-- [ ] Generate progressive training comparison report
-- [ ] Statistical significance testing (Mann-Whitney U test)
-- [ ] Identify optimal dataset size based on test set performance
-
-#### v0.6 (2026 Q3) - Academic Paper
-- [ ] Write methodology section (dataset, QLoRA, evaluation)
-- [ ] Generate publication-quality figures
-- [ ] Results analysis and discussion
-- [ ] arXiv preprint submission
-- [ ] Conference submission (IABSE, fib, ASCE)
+#### v0.6.3 (2026-05-25) **🎉 Latest Release**
+- ✅ Two-stage Quality Guard Agent implemented (Rule-based + Swallow-8B SLM)
+- ✅ CJK-aware token counting (correct Japanese tokenization)
+- ✅ Empirical threshold calibration (θ_low=98, θ_high=202 at 5th/95th percentile)
+- ✅ Full n=800 evaluation: PASS=727 (90.9%), FAIL=73 (9.1%)
+- ✅ End-to-end throughput: 8.97 s/row (~2.0 h total)
+- ✅ Stage 2 (Swallow-8B) saturation finding: 0 additional rejections
+- ✅ Output mode collapse discovery: Main Girder 100%, Rebar Exposure 99.6%
+- ✅ Priority Level 3 saturation analysis (all 727 PASS → score=0.54)
+- ✅ 2 analysis figures generated (violin plots + member/damage heatmap)
+- ✅ Paper complete: 25 pages, 10 figures, all sections (pdflatex, no errors)
 
 ### 🔮 Future Work
 
@@ -1293,6 +1395,9 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - [ ] Performance benchmarking
 
 #### Research Extensions
+- [ ] Balanced training corpus to address output mode collapse
+- [ ] Constrained-generation prompts (per-member damage reporting)
+- [ ] Priority scoring recalibration with explicit severity keywords
 - [ ] Multi-damage type support (crack detection, leakage, scaling)
 - [ ] Active learning for annotation efficiency
 - [ ] Multi-language support (Japanese ↔ English)
@@ -1333,4 +1438,4 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details
 
 ---
 
-**Last Updated**: March 20, 2026 (v0.1.0)
+**Last Updated**: May 25, 2026 (v0.6.3)

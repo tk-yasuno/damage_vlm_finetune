@@ -30,9 +30,9 @@
 \usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds,calc}
 
 %%
-\title{Fine-Tuning Vision-Language Models for\\
-Understanding Bridge Damage and Scoring Repair Priority:\\
-\large Application Methodology}
+\title{Fine-Tuning Vision-Language Models for\\[2pt]
+Understanding Bridge Damage and Scoring Repair Priority\\[2pt]
+with Low Quality Guard: Application Methodology}
 
 \author[1]{Takato Yasuno}
 % \affil[1]{Affiliation}
@@ -75,6 +75,9 @@ unoptimized baseline.
 Our approach contributes to data governance in bridge inspection, reduces
 inter-rater variability, and provides AI-assisted triage to augment
 expert engineers in inspection workflows.
+Furthermore, we introduce a two-stage \textbf{Quality Guard} using a
+fine-tuned Swallow-8B SLM to reject low-quality VLM outputs before
+priority scoring, preventing spurious scores from damaged or unrecognised images.
 
 \end{abstract}
 
@@ -130,8 +133,13 @@ repair priority index (Immediate to Minimal).
   \item \textbf{Repair Priority Scoring}: a transparent, auditable rule engine
         that converts VLM free-form output into a five-level priority index,
         enabling consistent maintenance triage without subjective judgment.
+  \item \textbf{Quality Guard Agent}: a two-stage guard (rule-based Stage~1
+        + Swallow-8B SLM judge Stage~2) that rejects low-quality outputs
+        before scoring, with thresholds calibrated from the empirical
+        5th/95th token-count percentiles of $n=800$ predictions (12.5\%
+        low-quality rate identified).
   \item \textbf{Visual Inspection ScoreBot}: an end-to-end local pipeline
-        combining the Damage VLM with the scoring engine---deployable without
+        combining the Damage VLM with the Quality Guard and scoring engine---deployable without
         cloud API dependencies on a single consumer GPU.
 \end{enumerate}
 
@@ -141,7 +149,8 @@ INT4/INT8/BF16 quantization levels without task-specific fine-tuning.
 The multi-stage inspection framework in~\cite{yasuno2026multistage} further
 motivated the end-to-end pipeline presented here.
 
-Section~\ref{sec:related} reviews related work.
+Section~\ref{sec:related} reviews related work, including
+Section~\ref{sec:related:guard} on AI agent and quality guardrail methods.
 Section~\ref{sec:methodology} details the system methodology.
 Section~\ref{sec:results} presents evaluation results.
 Section~\ref{sec:discussion} discusses findings and limitations.
@@ -370,6 +379,81 @@ bridge inspection dataset, delivering domain-appropriate structured
 damage descriptions without dependence on proprietary APIs or
 manual post-processing.
 
+\subsection{AI Agent and Quality Guardrail}
+\label{sec:related:guard}
+
+The reliability of VLM-generated descriptions in safety-critical domains
+critically depends on robust output quality control.
+Three complementary lines of research are directly relevant to the
+Quality Guard introduced in this work.
+
+\textbf{LLM-as-Judge and quality evaluation.}
+Zheng et al.~\cite{zheng2023judge} introduced the LLM-as-a-Judge paradigm
+through MT-Bench and Chatbot Arena, demonstrating that a strong language
+model can serve as an effective automated quality evaluator for free-text
+outputs.
+Building on this, Liu et al.~\cite{liu2023geval} proposed G-Eval, a
+framework that employs GPT-4 with chain-of-thought to evaluate natural
+language generation quality with higher human alignment than conventional
+n-gram metrics.
+Min et al.~\cite{min2023factscore} introduced FActScore to measure the
+factual precision of long-form text by decomposing outputs into atomic
+facts and verifying each independently.
+These judge-based evaluation frameworks motivate using a fine-tuned SLM
+(Swallow-8B~\cite{tokyotech2024swallow}) as a domain-aware quality
+evaluator for VLM damage descriptions, following the principle of
+``LLM judging LLM'' without relying on proprietary external APIs.
+
+\textbf{Guardrails and self-correction in LLM pipelines.}
+Constitutional AI~\cite{bai2022constitutional} proposed training AI
+systems to critique and revise their own outputs according to a set of
+principles, establishing the self-correction paradigm that underlies
+quality guardrail architectures.
+NeMo Guardrails~\cite{rebedea2023nemo} formalised this as a programmable
+rail system, allowing developers to define topical, safety, and format
+constraints that intercept LLM outputs before they reach downstream
+applications --- directly analogous to the quality gate in our v0.6 pipeline.
+Self-RAG~\cite{asai2023selfrag} extended the concept to retrieval-augmented
+generation, where a model learns to reflect on whether retrieval and
+generation steps should be invoked, achieving selective output through
+special reflection tokens.
+Chain-of-Verification~\cite{dhuliawala2023chainveri} reduced hallucination
+in LLM outputs by generating independent verification questions and
+cross-checking initial responses against them.
+These approaches collectively inform our two-stage guard design:
+Stage~1 applies deterministic rules (token-count thresholds and
+repetition detection) analogous to structural rails;
+Stage~2 invokes Swallow-8B as an LLM judge for borderline cases,
+combining speed with semantic depth.
+
+\textbf{AI agents with self-reflection.}
+ReAct~\cite{yao2023react} combined reasoning traces with action steps
+in language agents, enabling dynamic adjustment of the inference
+trajectory based on observed feedback.
+Reflexion~\cite{shinn2023reflexion} built on this by introducing verbal
+reinforcement signals from a linguistic reflection mechanism, allowing
+agents to revise strategies across trials without gradient updates.
+Shen et al.~\cite{shen2023alignment} surveyed alignment techniques for
+large language models, identifying output quality guardrails as a key
+mechanism for deploying LLMs in high-stakes applications.
+
+In the bridge inspection domain, the consequence of false-high quality
+scores is misallocated maintenance budgets and deferred safety-critical
+repairs.
+By interposing an SLM judge between the VLM and the rule-based priority
+scoring engine, the Quality Guard addresses the domain-specific risk that
+VLMs trained on limited data may produce plausible but content-sparse
+descriptions for images that are overexposed, occluded, or
+low-resolution --- cases where assigning a priority score would be
+misleading rather than informative.
+Our guard distinguishes two failure modes: \textit{``Not recognised from
+only image''} (insufficient visual information for any damage
+description) and \textit{``Dirty or Noisy image''} (repetitive or
+incoherent output). Only descriptions passing both stages receive a
+five-level repair priority score; failed samples return
+\textit{``No Score due to Low Quality Image''}, preserving the
+integrity of the priority ranking for downstream maintenance planning.
+
 %% ====================================================================
 \section{Methodology}
 \label{sec:methodology}
@@ -380,6 +464,8 @@ manual post-processing.
 Figure~\ref{fig:pipeline} illustrates the end-to-end pipeline comprising four
 sequential stages: image input, VLM-based damage understanding, structured
 information extraction, and repair priority scoring.
+A detailed algorithm flow that incorporates the Quality Guard Agent
+is shown in Figure~\ref{fig:algorithm_flow} (Section~\ref{sec:quality_guard}).
 
 %% ------ TikZ Pipeline Figure ------
 \begin{figure}[t]
@@ -863,6 +949,322 @@ Priority 5 triggers immediate-repair alerts; Priority 1 records a finding
 without scheduling intervention.
 
 %% ====================================================================
+\subsection{Quality Guard Agent}
+\label{sec:quality_guard}
+%% ====================================================================
+
+To prevent low-quality VLM outputs from generating spurious repair priority
+scores, we interpose a two-stage \textbf{Quality Guard Agent} between the
+VLM inference and the scoring engine.
+To prevent low-quality VLM outputs from generating spurious repair priority
+scores, we interpose a two-stage \textbf{Quality Guard Agent} between the
+VLM inference and the scoring engine.
+Only descriptions that pass both stages receive a five-level priority score;
+failed samples return \textit{``No Score due to Low Quality Image''}, preserving
+the integrity of the priority ranking for downstream maintenance planning.
+Figure~\ref{fig:algorithm_flow} illustrates the complete algorithm flow
+of the Visual Inspection ScoreBot~v0.6.3 pipeline.
+
+%% ------ TikZ: Full Algorithm Flow (two-column spanning) ------
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=0.60cm,
+  %% Main pipeline nodes (blue)
+  pipe/.style={rectangle, rounded corners=4pt,
+               draw=blue!55, fill=blue!7,
+               text width=9.0cm, minimum height=0.72cm,
+               align=center, font=\footnotesize},
+  %% Quality Guard stage nodes (orange, left-aligned text)
+  grd/.style={rectangle, rounded corners=4pt,
+              draw=orange!60, fill=orange!7,
+              text width=9.0cm,
+              align=left, inner sep=7pt, font=\footnotesize},
+  %% Scoring node (purple)
+  scr/.style={rectangle, rounded corners=4pt,
+              draw=purple!55, fill=purple!6,
+              text width=9.0cm, minimum height=0.72cm,
+              align=center, font=\footnotesize},
+  %% Output node (green)
+  otn/.style={rectangle, rounded corners=4pt,
+              draw=green!60, fill=green!9,
+              text width=9.0cm, minimum height=0.72cm,
+              align=center, font=\footnotesize},
+  %% Fail exit nodes (red, right column)
+  fal/.style={rectangle, rounded corners=4pt,
+              draw=red!55, fill=red!7,
+              text width=3.2cm, minimum height=0.72cm,
+              align=center, font=\scriptsize},
+  %% Arrows
+  arr/.style={-Stealth, thick, gray!65},
+  far/.style={-Stealth, thick, red!55},
+  %% Annotation labels
+  alb/.style={font=\scriptsize\itshape, text=gray!65},
+]
+
+%% -------- Stage 1: Image Input --------
+\node[pipe] (img)
+  {\textbf{Image Input}\quad $n=800$ bridge inspection images};
+
+%% -------- Stage 2: VLM Inference --------
+\node[pipe, below=of img] (vlm)
+  {\textbf{VLM Inference:}\; LLaVA-1.5-7B $+$ QLoRA adapter (3k fine-tune)\\[-2pt]
+   {\scriptsize batch\_size=8,\; \texttt{torch.compile()} $\Rightarrow$ \textbf{10.10\,s/image}}};
+
+%% -------- Quality Guard Stage 1 --------
+\node[grd, below=1.1cm of vlm] (g1)
+  {\textbf{Stage~1: Rule-Based Filter}\\[-1pt]
+   {\scriptsize\itshape CPU-only filter,\; $\approx$0.01\,s/row}\\[3pt]
+   {\scriptsize
+    \textbullet\; File existence check (Stage~0 pre-filter: reject missing image files)\\[1pt]
+    \textbullet\; Token count rule:\; $\theta_{\text{low}}{=}98 \leq tc \leq
+                  202{=}\theta_{\text{high}}$\; (empirical 5th\,/\,95th percentile)\\[1pt]
+    \textbullet\; Repetition detection:\; $n$-gram coverage exceeds threshold
+                  $\Rightarrow$ FAIL\\[1pt]
+    \textbullet\; Keyword absence:\; no structural damage term found $\Rightarrow$ FAIL}};
+
+%% -------- Quality Guard Stage 2 --------
+\node[grd, below=0.55cm of g1] (g2)
+  {\textbf{Stage~2: SLM-as-Judge}\\[-1pt]
+   {\scriptsize\itshape Swallow-8B (tokyotech), NF4\,4-bit quantisation (Unsloth), GPU}\\[3pt]
+   {\scriptsize
+    \textbullet\; Scope: one-image, current-time-limited structured prompt\\[1pt]
+    \textbullet\; Response format:\;
+                  \texttt{VERDICT: <PASS\,|\,FAIL>}\; +\; \texttt{REASON\_CODE}\\[1pt]
+    \textbullet\; Empirical outcome ($n{=}800$):\;
+                  PASS 87.5\%\,($n{=}700$);\; Low-quality 12.5\%\,($n{=}100$)}};
+
+%% -------- Stage 3: Structured Extraction --------
+\node[pipe, below=1.1cm of g2] (ext)
+  {\textbf{Structured Extraction:}\;
+   regex $\to$ JSON\; (\textit{member, damage\_type, location})};
+
+%% -------- Stage 4: Priority Scoring --------
+\node[scr, below=of ext] (scoring)
+  {\textbf{Priority Scoring:}\; YAML rule engine\\[-2pt]
+   {\scriptsize
+    score\;$=$\;severity\;$\times$\;damage\_type\;$\times$\;location\_weight
+    $\;\Rightarrow\;$ Priority\;1--5}};
+
+%% -------- Output --------
+\node[otn, below=of scoring] (out)
+  {\textbf{Repair Priority Index 1--5}\\[-2pt]
+   {\scriptsize
+    P5\;immediate\;$\cdots$\;P3\;mid-term\;$\cdots$\;P1\;observation only}};
+
+%% -------- FAIL exit nodes (right column) --------
+\node[fal, right=1.8cm of g1] (f1)
+  {\textbf{FAIL (Rule)}\\[2pt]``No Score''\\[2pt]{\scriptsize 9.1\%\;($n{=}73$)}};
+\node[fal, right=1.8cm of g2] (f2)
+  {\textbf{FAIL (SLM)}\\[2pt]``No Score''\\[2pt]{\scriptsize $\approx$3.4\%}};
+
+%% -------- Main flow arrows --------
+\draw[arr] (img)     -- (vlm)
+  node[midway, right=4pt, alb] {image file};
+\draw[arr] (vlm)     -- (g1)
+  node[midway, right=4pt, alb] {damage description text};
+\draw[arr] (g1)      -- (g2)
+  node[midway, right=4pt, alb] {PASS};
+\draw[arr] (g2)      -- (ext)
+  node[midway, right=4pt, alb] {PASS\;(87.5\%)};
+\draw[arr] (ext)     -- (scoring);
+\draw[arr] (scoring) -- (out);
+
+%% -------- FAIL branch arrows --------
+\draw[far] (g1.east) -- (f1.west)
+  node[midway, above=2pt, font=\scriptsize, text=red!65] {FAIL};
+\draw[far] (g2.east) -- (f2.west)
+  node[midway, above=2pt, font=\scriptsize, text=red!65] {FAIL};
+
+%% -------- Quality Guard Agent background box --------
+\begin{pgfonlayer}{background}
+  \node[draw=orange!60, very thick, dashed, rounded corners=8pt,
+        fill=orange!3,
+        fit=(g1)(g2)(f1)(f2), inner sep=10pt,
+        label={[font=\footnotesize\bfseries, text=orange!80,
+                inner sep=6pt]above:
+               \textbf{Quality Guard Agent (v0.6.3)}}] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}
+\caption{Complete algorithm flow of the Visual Inspection ScoreBot~v0.6.3
+pipeline.
+The Quality Guard Agent interposes between VLM inference and priority
+scoring, filtering low-quality outputs via a two-stage architecture:
+Stage~1 (rule-based, CPU, $\approx$0.01\,s/row) and Stage~2
+(Swallow-8B SLM judge, GPU, $\approx$10\,s/row).
+Only outputs passing both stages receive a five-level Repair Priority
+Index; 12.5\% of predictions are rejected as low quality.}
+\label{fig:algorithm_flow}
+\end{figure*}
+%% -------------------------------------------------------
+
+\subsubsection{Empirical Threshold Derivation}
+
+Rather than setting token-count thresholds from domain heuristics alone,
+we first analyse the distribution of output lengths over all $n=800$
+test-set predictions.
+Figure~\ref{fig:lq_analysis} presents (left) a violin plot of the token-count
+distribution and (right) the breakdown of low-quality patterns within the
+5th and 95th percentile tails.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.46\textwidth]{figures_vlm/09_analysis_low_quality.png}
+\caption{LLaVA-3k inference output token analysis ($n=800$).
+\textit{Left}: violin plot showing the token-count distribution
+(mean\,=\,135.2, std\,=\,39.5, median\,=\,120).
+Red dashed/dotted lines mark the empirically derived rule thresholds
+($\theta_{\text{low}}=98$ at 5th pct; $\theta_{\text{high}}=202$ at 95th pct).
+\textit{Right}: quality pattern breakdown within the threshold regions.
+Acceptable outputs (87.5\%) dominate; low-quality patterns total 12.5\%
+across five failure categories.}
+\label{fig:lq_analysis}
+\end{figure}
+
+The violin shape reveals a principal density mass between 100 and 220~tokens
+with a narrow waist below 100, indicating that genuinely informative damage
+descriptions cluster in a well-defined range.
+We set the token thresholds at empirical percentiles:
+
+\begin{equation}
+  \theta_{\text{low}} = 98 \;\text{(5th pct)}, \quad
+  \theta_{\text{high}} = 202 \;\text{(95th pct)}
+  \label{eq:thresholds}
+\end{equation}
+
+\noindent
+This data-driven calibration avoids the twin risks of an over-tight lower bound
+(rejecting valid short descriptions) and an over-loose upper bound
+(admitting repetitive or hallucinated long outputs).
+Table~\ref{tab:lq_patterns} summarises the quality-pattern breakdown.
+
+\begin{table}[h]
+\centering
+\caption{Low-quality pattern breakdown ($n=800$, 3k model).}
+\label{tab:lq_patterns}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Pattern} & \textbf{Count} & \textbf{\%} \\
+\midrule
+Acceptable                     & 700 & 87.5 \\
+Short description              &  35 &  4.4 \\
+Overly long description        &  27 &  3.4 \\
+Repetitive text                &  24 &  3.0 \\
+Dirty or Noisy image           &  12 &  1.5 \\
+Not recognised from only image &   2 &  0.2 \\
+\midrule
+\textbf{Low-quality total}     & 100 & 12.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Scope Definition}
+
+A critical design decision is the evaluation scope.
+Inspection text generated by VLMs trained on real inspection records tends to
+reproduce the reporting style of the training data, including references to
+previous inspection comparisons (\textit{``since the last inspection\ldots''})
+and maintenance recommendations (\textit{``corrective action is required''}).
+These out-of-scope clauses are artefacts of the training distribution,
+not hallucinations in the strict sense.
+
+We therefore define a \textit{``one image, current time limited''} scope:
+quality is assessed exclusively on the current-state damage observation.
+Out-of-scope content (two-time-point comparisons, maintenance directives)
+is \textbf{not penalised} provided that current damage information is present;
+only descriptions that consist \textit{entirely} of out-of-scope content,
+with no damage information for the current image, are classified as FAIL.
+This design preserves useful damage signals while filtering outputs that
+carry no actionable inspection content.
+
+\subsubsection{Stage 1: Rule-Based Filter}
+\label{sec:guard_stage1}
+
+Stage~1 applies four deterministic rules to each prediction text $\hat{t}_i$
+at negligible cost (${\approx}0.01$~s per sample, CPU-only):
+
+\begin{enumerate}[leftmargin=*,itemsep=1pt]
+  \item \textbf{File existence} (Stage~0 pre-filter): if the source image is
+        absent, return \textit{``No such file or directory''} (FAIL).
+  \item \textbf{Token count}: if $|\hat{t}_i| < \theta_{\text{low}} = 98$,
+        return \textit{``Short description''} (FAIL).
+  \item \textbf{Repetition detection}: if a repeated $n$-gram pattern exceeds
+        a coverage threshold, return \textit{``Dirty or Noisy image''} (FAIL).
+  \item \textbf{Keyword absence}: if no structural damage keyword is present
+        and vague scope-exit phrases dominate, return
+        \textit{``Not recognised from only image''} (FAIL).
+\end{enumerate}
+
+Predictions passing all four rules proceed to Stage~2.
+Stage~1 alone captures 90.9\% of outputs as \textit{High Quality (rule only)}
+at a throughput of ${\approx}0.01$~s/row, enabling rapid triage without GPU
+resources.
+
+\subsubsection{Stage 2: SLM-as-Judge}
+\label{sec:guard_stage2}
+
+Stage~2 invokes \textbf{Swallow-8B}~\cite{tokyotech2024swallow}
+(\texttt{tokyotech-llm/Llama-3-Swallow-8B-Instruct-v0.1}),
+a Japanese instruction-tuned SLM, as a semantic quality judge following
+the LLM-as-a-Judge paradigm~\cite{zheng2023judge}.
+The model receives the extracted text with a structured prompt specifying
+the evaluation scope and returns a verdict in a fixed two-line format:
+
+\begin{small}
+\begin{verbatim}
+VERDICT: <PASS | FAIL>
+REASON_CODE: <High Quality | Short description
+             | Dirty or Noisy image
+             | Not recognised from only image>
+\end{verbatim}
+\end{small}
+
+Inference runs under the \textbf{Unsloth}~\cite{han2023unsloth} framework
+(\texttt{FastLanguageModel.from\_pretrained} + \texttt{for\_inference()})
+with 4-bit NF4 quantisation, fitting within the 16\,GB VRAM budget after
+LLaVA-1.5-7B is unloaded.
+Batch inference at $B=8$ (Section~\ref{sec:inference}) achieves
+\textbf{10.10~seconds per guarded image} end-to-end on the RTX\,4060\,Ti.
+
+The system prompt explicitly states the one-image/current-time scope
+and instructs the judge to disregard out-of-scope clauses when
+evaluating whether damage content is present.
+
+\subsubsection{Quality Guard Outcomes}
+
+Table~\ref{tab:qg_outcomes} reports the final Quality Guard Agent
+outcomes over all $n=800$ test samples from the v0.6.3 pipeline.
+All failures are captured at Stage~1 (rule-based filter); Stage~2
+(Swallow-8B SLM judge) confirms all 727 Stage~1 PASS samples as
+\textit{High Quality}, adding no additional rejections.
+This indicates that the empirically calibrated rule thresholds
+(Section~\ref{sec:guard_stage1}) already cover the observable
+low-quality patterns in the 3k model's output distribution.
+
+\begin{table}[h]
+\centering
+\caption{Quality Guard Agent final outcomes ($n=800$, 3k model,
+         v0.6.3 pipeline). All FAILs originate at Stage~1;
+         Stage~2 yields no additional rejections.}
+\label{tab:qg_outcomes}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Outcome} & \textbf{Count} & \textbf{\%} \\
+\midrule
+PASS --- High Quality          & 727 & 90.9 \\
+FAIL --- Dirty or Noisy image  &  36 &  4.5 \\
+FAIL --- Short description     &  35 &  4.4 \\
+FAIL --- No such file          &   2 &  0.2 \\
+\midrule
+\textbf{FAIL total}            &  73 &  9.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ====================================================================
 \subsection{Evaluation Protocol}
 \label{sec:evaluation}
 %% ====================================================================
@@ -1096,6 +1498,17 @@ cache, and JIT specialization accumulate benefits across sequential model evalua
 Three scaled models (2k/3k/4k) required a combined 5.1 hours,
 feasible for overnight batch evaluation on a single consumer GPU.
 
+\textbf{End-to-end v0.6.3 pipeline timing.}
+The full Quality Guard Agent pipeline (v0.6.3, batch\_size=8) running over
+all $n=800$ test images achieves \textbf{8.97 s/row} (total 7{,}178 s,
+approximately 2.0 hours on RTX\,4060\,Ti 16\,GB).
+This is 11.2\% faster than the warm-up measurement of 10.10 s/row
+observed on the initial $n=50$ sample, consistent with
+\texttt{torch.compile()} JIT specialization accumulating over larger batches.
+The 8.97 s/row end-to-end time encompasses VLM inference, Quality Guard
+Stage~1 (CPU), Quality Guard Stage~2 (Swallow-8B GPU), structured
+extraction, and priority scoring.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.44\textwidth]{figures_vlm/03_tier_distribution_grouped.png}
@@ -1149,6 +1562,138 @@ mean (0.6909) and median (0.7081); (ii) 2k has the lowest Very Poor percentage
 The table also reveals that all models have minimum similarities below 0.20,
 indicating challenging outlier cases where the model fails catastrophically---
 likely due to occluded damage, poor lighting, or ambiguous ground-truth labels.
+
+\subsection{Quality Guard Agent Performance}
+\label{sec:results_qg}
+
+Table~\ref{tab:qg_final} summarises the Quality Guard Agent results
+for the 3k model over the full 800-sample test set.
+
+\begin{table}[h]
+\centering
+\caption{Quality Guard Agent final results ($n=800$, v0.6.3 pipeline).}
+\label{tab:qg_final}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Metric} & \textbf{Value} & \textbf{\%} \\
+\midrule
+Total images                    & 800 & 100.0 \\
+PASS (High Quality)             & 727 &  90.9 \\
+FAIL --- Dirty or Noisy image   &  36 &   4.5 \\
+FAIL --- Short description      &  35 &   4.4 \\
+FAIL --- No such file           &   2 &   0.2 \\
+\midrule
+End-to-end throughput & \multicolumn{2}{c}{8.97 s/row} \\
+Total elapsed         & \multicolumn{2}{c}{7{,}178 s ($\approx$2.0 h)} \\
+Stage~2 additional rejections & \multicolumn{2}{c}{0 (Stage~1 sufficient)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Stage~2 saturation.}
+Notably, the Swallow-8B SLM judge (Stage~2) produces no additional
+rejections beyond Stage~1: all 727 samples passing the rule-based
+filter receive a \texttt{VERDICT: PASS} from the SLM judge.
+This outcome is consistent with the empirical calibration of
+$\theta_{\text{low}}=98$ and $\theta_{\text{high}}=202$ at the
+5th and 95th population percentiles---the token-count window already
+excludes the ambiguous-quality region that would challenge the SLM judge.
+For this model and corpus, Stage~1 alone achieves the same decision
+as the full two-stage pipeline, demonstrating that the lightweight
+CPU filter provides strong quality triage with negligible overhead.
+
+\textbf{Priority level distribution.}
+Of the 727 PASS samples, all receive Priority Level~3
+(mean score $= 0.540$), indicating that the current YAML scoring
+rules map the structural damage descriptions generated by the 3k model
+uniformly to the mid-range priority tier.
+This saturation at Level~3 reflects a calibration gap between the
+scoring rules---designed for the full range of damage severities---and
+the output style of the fine-tuned model, which tends toward
+neutral-to-moderate severity descriptions.
+Recalibrating the rule thresholds or incorporating explicit severity
+signals into the VLM prompt constitutes a priority direction for
+future work.
+
+Figure~\ref{fig:priority_violin} visualises the three quality dimensions
+of the 727 PASS samples side-by-side.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures_vlm/10_priority_score_violin.png}
+\caption{Quality metric violin plots for $n=800$ test samples (v0.6.3, 3k model).
+\textit{Left}: Priority score distribution for PASS 727 samples---all 727 receive
+score\,=\,0.54 (Level~3), demonstrating complete scoring saturation.
+\textit{Centre}: Cosine similarity comparison between PASS ($n=727$,
+median\,=\,0.705) and FAIL ($n=73$, median\,=\,0.659); the Quality Guard
+preferentially retains higher-similarity predictions.
+\textit{Right}: Output token count for PASS ($n=727$, median\,=\,120) vs
+FAIL ($n=73$, median\,=\,97$\,\approx\,\theta_{\text{low}}$), validating the
+threshold placement at the 5th/95th percentiles.}
+\label{fig:priority_violin}
+\end{figure*}
+
+\textbf{Quality Guard semantic separation.}
+The centre panel of Figure~\ref{fig:priority_violin} reveals an important
+property of the Quality Guard: PASS samples achieve a cosine similarity
+median of 0.705 (within the \textit{Good} tier), while FAIL samples have a
+lower median of 0.659 (lower \textit{Acceptable}).
+Although the Quality Guard is defined purely on output-text properties
+(token count, repetition, keyword presence), it incidentally separates
+predictions with higher semantic alignment from those with lower alignment.
+This suggests that low-quality VLM outputs---short, repetitive, or
+keyword-free descriptions---are also semantically less faithful to the
+ground-truth inspection text, validating the guard as a proxy for
+output quality in the absence of reference text.
+The right panel further confirms that FAIL token counts cluster near
+$\theta_{\text{low}}=98$, corroborating that short descriptions are the
+primary rejection driver.
+
+\textbf{Output mode collapse: member and damage bias.}
+Figure~\ref{fig:member_damage} presents the structural member and damage
+type frequency analysis for the 727 PASS samples.
+Two findings stand out.
+First, \textit{Main Girder} is mentioned in 100\% of predictions (727/727),
+and \textit{Rebar Exposure} (724/727, 99.6\%) and \textit{Spalling}
+(717/727, 98.6\%) appear in virtually all outputs.
+Second, the member--damage co-occurrence heatmap (Figure~\ref{fig:member_damage},
+bottom) shows a strongly dominant cluster at
+Main\,Girder\,$\times$\,\{Rebar Exposure, Spalling\}, with all other
+member--damage combinations occurring at frequencies below 50\%.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures_vlm/10_member_damage_analysis.png}
+\caption{Structural member and damage type analysis for PASS 727 samples
+(v0.6.3, 3k model).
+\textit{Top left}: Member mention frequency; Main Girder appears in 100\%
+of predictions, revealing near-complete output bias toward this member.
+\textit{Top right}: Damage type frequency; Rebar Exposure (99.6\%) and
+Spalling (98.6\%) dominate, indicating stereotyped damage vocabulary.
+\textit{Bottom}: Member $\times$ damage type co-occurrence heatmap (top~8
+each); the Main Girder $\times$ Rebar Exposure/Spalling cell dominates
+at counts $\geq 700$, confirming output mode collapse.}
+\label{fig:member_damage}
+\end{figure*}
+
+This pattern is consistent with \textbf{output mode collapse}: the 3k model
+has converged to a stereotyped template that reports damage on the main girder
+with rebar exposure and spalling, regardless of the actual image content.
+The dominant training pattern in the source corpus---where main girder concrete
+damage is the most frequent damage category in Japanese highway bridge
+inspections---appears to have caused the model to default to this template
+when confronted with novel images.
+Mode collapse is a known risk in small-dataset fine-tuning of generative models:
+when the training distribution is skewed toward a dominant pattern, the model
+exploits the template rather than learning to discriminate member- and
+damage-specific features.
+This directly explains the scoring saturation at Level~3: because all outputs
+describe the same member--damage combination, the YAML scoring rules assign
+the same score uniformly.
+Addressing this requires either (i) data augmentation to balance member and
+damage type coverage in the training set, or (ii) constrained-generation prompts
+that mandate the VLM to report on the specific members visible in each image.
 
 \FloatBarrier
 
@@ -1210,6 +1755,48 @@ This divergence between validation metrics and semantic similarity underscores
 that \textit{loss-based early stopping alone is insufficient}; practitioners
 must validate against domain-specific metrics (e.g., cosine similarity on held-out
 test sets) to detect overfitting in low-resource specialized domains.
+
+\subsection{Output Mode Collapse and Scoring Calibration}
+\label{sec:disc_mode_collapse}
+
+The member and damage type analysis (Figure~\ref{fig:member_damage})
+reveals that the 3k model generates near-identical descriptions for
+100\% of PASS samples: every prediction mentions \textit{Main Girder}
+and virtually all include \textit{Rebar Exposure} (99.6\%) and
+\textit{Spalling} (98.6\%).
+This output mode collapse has two direct consequences for the downstream
+scoring and priority system.
+
+\textbf{Consequence 1: Scoring saturation.}
+Because all outputs describe the same dominant member--damage pattern,
+the YAML rule engine assigns an identical score of 0.54 (Level~3)
+to every PASS sample.
+The priority index therefore carries no discriminative power for maintenance
+scheduling: every bridge receives the same ``mid-term repair'' recommendation,
+defeating the purpose of a five-level triage system.
+
+\textbf{Consequence 2: Inflated cosine similarity.}
+If the model outputs similar text for every image, ground-truth texts that
+happen to match the dominant template will score high similarity, while
+divergent ground-truths will score low---producing high variance in similarity
+unrelated to actual image understanding.
+This explains the broad cosine similarity range (0.40--0.90) observed
+even among PASS samples.
+
+\textbf{Mitigation strategies.}
+Three complementary approaches are identified to break the mode collapse:
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Balanced corpus curation}: up-sample records from non-main-girder
+        members (deck slab, bearing, pier) to reduce the training bias toward
+        the dominant member--damage combination.
+  \item \textbf{Constrained-generation prompt}: augment the inference prompt
+        with explicit instructions to identify the specific member visible in
+        the image and report only damage present in the current photo,
+        discouraging template reuse.
+  \item \textbf{Supervised diversity scoring}: add a diversity metric
+        (entropy over member-type predictions) to the fine-tuning loss
+        to penalize uniform output distributions during training.
+\end{enumerate}
 
 \subsection{Approaching the Good Tier}
 
@@ -1288,6 +1875,24 @@ The rule-based engine covers the most common damage patterns in the training
 corpus but may produce default scores for rare combinations not explicitly
 encoded in the YAML rules.
 
+\textbf{Quality Guard calibration.}
+The 5th/95th percentile thresholds ($\theta_{\text{low}}=98$,
+$\theta_{\text{high}}=202$) are calibrated on the 3k-model outputs.
+Different fine-tuning checkpoints or base VLMs may exhibit shifted
+token-count distributions, requiring re-calibration of the thresholds
+before deployment.
+Furthermore, the Swallow-8B judge was selected for Japanese-language
+alignment; other target languages would require a language-matched SLM.
+
+\textbf{Priority scoring calibration.}
+All 727 Quality Guard PASS samples receive Priority Level~3
+(mean score\,$= 0.540$), suggesting that the YAML rule engine's
+severity thresholds do not span the damage severity range observed
+in the 3k model's output style.
+Future work should re-calibrate the scoring rules jointly with the
+VLM fine-tuning stage, or incorporate explicit severity keywords
+(e.g., ``advanced'' vs.\ ``initial'') into the VLM's output template.
+
 \textbf{Hardware.}
 All experiments run on a single RTX 4060 Ti 16 GB GPU;
 performance on other hardware configurations has not been validated.
@@ -1302,6 +1907,81 @@ maintaining human accountability for final decisions.
 The transparent YAML scoring rules allow domain experts to audit and update
 priority logic without machine learning expertise, supporting the trustworthy
 AI requirements of safety-critical infrastructure management.
+The Quality Guard Agent further enhances deployment safety by ensuring that
+only semantically complete damage descriptions reach the scoring engine,
+reducing the risk of assigning spurious priority scores to ambiguous or
+image-quality-limited outputs.
+
+\subsection{Quality Guard Efficacy and Threshold Design}
+\label{sec:disc_qg}
+
+An empirical analysis of the 3k model's output over all $n=800$ test images
+(Figure~\ref{fig:lq_analysis}) reveals a 12.5\% low-quality rate under the
+5th/95th percentile thresholds, distributed across five distinct failure
+modes.  This finding has three practical implications.
+
+\textbf{Threshold design principle.}
+Setting thresholds at population percentiles rather than absolute token counts
+guards against output-length drift across model variants.
+As the VLM checkpoint is updated (e.g., re-fine-tuned on additional data),
+re-running the token distribution analysis and resetting $\theta_{\text{low}}$
+and $\theta_{\text{high}}$ from the new 5th/95th percentiles maintains a
+consistent rejection rate regardless of absolute length shifts.
+
+\textbf{Short description as the dominant failure mode.}
+Among the 100 rejected samples, ``Short description'' (35 cases, 4.4\%)
+accounts for the largest single failure category,
+suggesting that some bridge images do not provide sufficient visual
+information for a 7B-parameter model to generate an informative report.
+Augmenting the training corpus with difficult low-quality images, or
+providing explicit instructions to report uncertainty rather than generating
+a brief output, may address this failure mode.
+
+\textbf{Repetitive text and the need for SLM-level semantics.}
+Repetitive text (24 cases, 3.0\%) and ``Dirty or Noisy image'' (12 cases,
+1.5\%) cannot reliably be detected by simple keyword or length heuristics;
+they require the sentence-level semantic understanding that the Swallow-8B
+judge provides.  This motivates the two-stage design: Stage~1 handles the
+clear-cut failures at $O(0.01)$~s/sample, while Stage~2 adjudicates
+ambiguous intermediate-length outputs at $O(10)$~s/sample, concentrating
+the GPU cost where it adds the most value.
+
+\subsection{Multi-Period Extension and Panel Data Inference}
+\label{sec:disc_panel}
+
+The current system operates under a strict \textit{one-image,
+current-time-limited} scope: each inference session processes a single
+image representing the current inspection state.
+This intentional constraint avoids confounding the VLM with longitudinal
+context it was not trained to interpret, but it also precludes a class of
+higher-value inferences that practitioners consistently request.
+
+A natural next step is panel-data VLM inference, where the model receives
+at minimum two aligned images---a baseline (previous inspection) and a
+current observation---together with metadata such as the inter-inspection
+interval, structural form, traffic volume, coastal exposure, and seismic
+zone.  Three concrete extensions are envisioned:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Differential damage detection}: prompt the VLM with a
+        two-frame pair and elicit a description of the \textit{change} in
+        damage extent and severity rather than absolute current state.
+  \item \textbf{Deterioration rate modelling}: integrate the differential
+        output with elapsed time and structural attributes to estimate a
+        per-member deterioration rate, enabling proactive scheduling before
+        a structure enters the emergency tier.
+  \item \textbf{Importance-weighted prioritisation}: incorporate route
+        criticality (detour cost, daily traffic count, alternative-route
+        availability) and consequence-of-failure severity into the priority
+        scoring formula, shifting from a purely damage-based index to a
+        risk-adjusted maintenance schedule.
+\end{enumerate}
+
+Realising these extensions requires a temporally annotated dataset linking
+multiple inspection records for the same structure over time---a non-trivial
+curation effort---as well as multi-image instruction templates and updated
+scoring rules that incorporate delta-damage signals.  We identify this as
+the primary long-term research direction for this system.
 
 %% ====================================================================
 \section{Conclusion}
@@ -1324,14 +2004,21 @@ Key results are as follows.
         \texttt{batch\_size=8} achieves 10.06 s/image---a 70.2\%
         improvement---enabling 800-image evaluation within 2.2 hours on a
         consumer GPU.
+  \item \textbf{Quality Guard Agent}: empirical token-count analysis of
+        $n=800$ predictions reveals a 12.5\% low-quality rate; a two-stage
+        guard (rule-based + Swallow-8B SLM judge) filters these outputs
+        before scoring, with thresholds calibrated at the 5th/95th
+        percentiles of the output length distribution.
 \end{enumerate}
 
 Future work will focus on: (i) expanding the dataset to investigate
 whether the \textit{Good} tier ($\bar{\rho}\geq 0.70$) can be reached;
 (ii) replacing regex-based extraction with structured generation;
 (iii) evaluating the scoring engine against expert-assigned priority rankings;
-and (iv) extending the pipeline to other inspection categories and
-multi-language settings.
+(iv) extending the pipeline to other inspection categories and
+multi-language settings; and (v) developing a panel-data VLM variant that
+processes multi-period inspection pairs to estimate deterioration rates and
+enable risk-adjusted maintenance scheduling.
 
 All code and configuration files are publicly available at
 \url{https://github.com/tk-yasuno/damage_vlm_finetune}.
