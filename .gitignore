@@ -35,7 +35,8 @@ ENV/
 # PyCharm
 .idea/
 
-.venv-vlm/
+.venv-pred/
+.venv-train/
 
 # VS Code
 .vscode/

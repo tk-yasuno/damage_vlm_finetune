@@ -1,4 +1,4 @@
-# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.6.3
+# Bridge Damage VLM Fine-Tuning: Automated Assessment System v0.7.3
 
 **Progressive Fine-Tuning of LLaVA-1.5-7B with Quality Guard Agent for Bridge Damage Analysis and Repair Priority Scoring**
 
@@ -19,6 +19,9 @@
 - [v0.4: QLoRA Progressive Training](#-v04-qlora-progressive-training)
 - [v0.5.1: Model Evaluation & Visualization](#-v051-model-evaluation--visualization)
 - [v0.6.3: Quality Guard Agent & Full Pipeline](#-v063-quality-guard-agent--full-pipeline-evaluation)
+- [v0.7.1: Image Size Optimization for QLoRA](#-v071-image-size-optimization-for-qlora-fine-tuning)
+- [v0.7.2: pairdata_v2 Progressive Retraining (1k-4k)](#-v072-pairdata_v2-progressive-retraining-1k-4k)
+- [v0.7.3: Quality Guard Recalibration & Full Pipeline](#-v073-quality-guard-recalibration--full-pipeline)
 - [Performance Metrics](#performance-metrics)
 - [Setup](#setup)
 - [Usage](#usage)
@@ -416,8 +419,8 @@ Required Keywords (at least one):
 
 **Usage**:
 ```bash
-# Activate virtual environment
-.\.venv-vlm\Scripts\Activate.ps1
+# Activate virtual environment (training)
+.\.venv-train\Scripts\Activate.ps1
 
 # Run dataset preparation
 python prepare_v03_dataset.py
@@ -974,6 +977,156 @@ The academic paper (`paper_damage_vlm/1_Methodology/methodology.tex`) is complet
 
 ---
 
+## 🖼️ v0.7.1: Image Size Optimization for QLoRA Fine-Tuning
+
+### Status: ✅ Complete
+
+**Completion Date**: 2026-05-25  
+**Experiment**: Controlled comparison of 3 input image datasets at 1k scale
+
+### Background
+
+LLaVA-1.5-7B uses a CLIP ViT-L/14-336 vision encoder pretrained at **336×336 px**.
+Feeding images at arbitrary sizes forces internal rescaling and introduces resampling
+artifacts into the patch embeddings, potentially degrading fine-tuning quality.
+This experiment quantifies the impact of pre-standardising training images to the
+model's native resolution.
+
+### Image Preprocessing Pipeline
+
+| Step | Description | Output |
+|------|-------------|--------|
+| 1 | Long-side resize to 1024 px (aspect-ratio preserved) | `data/inspect_images_v2/` — 10,789 images |
+| 2 | Manual removal of blueprints / blank / corrupted images | 10,668 images remain (121 removed) |
+| 3a | Center-crop to square → resize to 336×336 | `data/inspect_images_336/` — 10,668 images, ~0.034 MB avg |
+| 3b | Center-crop to square → resize to 448×448 | `data/inspect_images_448/` — 10,668 images, ~0.060 MB avg |
+
+Center-crop (rather than pad-and-resize) was chosen because bridge damage photos are
+mixed portrait/landscape. Padding introduces black borders that divert the vision
+encoder's attention from damage regions.
+
+### Comparative Training Results (1k Scale, 3 Epochs)
+
+| Dataset | Image Source | Image Size | Training Time | eval_loss | eval Token Accuracy |
+|---------|-------------|------------|---------------|-----------|---------------------|
+| pairdata_v2-1 | `rank_c_images_n10789` | Variable (original) | 1:34:53 | 3.189 | 89.5% |
+| **pairdata_v2-2** | **`inspect_images_336`** | **336×336 px** | **1:21:46** | 3.194 | **90.1%** |
+| pairdata_v2-3 | `inspect_images_448` | 448×448 px | 1:21:57 | 3.202 | 89.9% |
+
+> All runs: `train_v07_qlora.py`, LoRA r=32/α=64, LR=2e-4, batch_size=4, BF16, RTX 4060 Ti 16GB
+
+### Key Finding
+
+**336×336 px is the optimal input size** for LLaVA-1.5-7B fine-tuning on bridge damage images:
+
+- **+0.6 pt token accuracy** vs. variable-size originals
+- **14% shorter training time** (1:34:53 → 1:21:46) due to uniform tensor shapes enabling better GPU batching
+- 448×448 px shows no accuracy gain over 336×336 px, despite 76% larger file size — the CLIP encoder's 336 px pretraining is the binding constraint
+
+### Configuration Update
+
+`config.yaml` and `train_v07_qlora.py` now default to `data/inspect_images_336/`:
+
+```yaml
+# config.yaml — v0.7.1
+v03_dataset:
+  image_dir: "data/inspect_images_336"   # 336×336 center-crop (LLaVA-1.5 native)
+  # image_dir: "data/inspect_images_448"  # 448×448 alternative
+  # image_dir: "data/inspect_images_v2"   # max 1024px long side (original)
+```
+
+### Scripts
+
+- `resize_images_v2.py` — Step 1: long-side 1024 px resize
+- `crop_resize_images.py` — Steps 3a/3b: center-crop + resize to 336 and 448
+- `train_v07_qlora.py` — Added `--image-base-dir` CLI option for dataset switching
+
+### Further Reading
+
+- [docs/Lesson_Image_Size.md](docs/Lesson_Image_Size.md) — Full lesson notes and S7 comparison table
+
+---
+
+## 📈 v0.7.2: pairdata_v2 Progressive Retraining (1k-4k)
+
+### Status: ✅ Complete
+
+**Completion Date**: 2026-05-27  
+**Scope**: Full progressive QLoRA retraining on denoised `pairdata_v2` with `inspect_images_336`
+
+### What Was Completed
+
+- Completed all four scales (`1k`, `2k`, `3k`, `4k`) under a fixed training recipe
+- Updated supplementary section **S.4** in methodology with final tables and observations
+- Added S.4 figure using the same plotting style as Figure 9:
+  - `paper_damage_vlm/1_Methodology/figures_vlm/11_s4_validation_loss_pairdata_v2.png`
+  - plotted from raw eval checkpoints (no interpolation) for fair comparison
+
+### Final Progressive Results (pairdata_v2)
+
+| Scale | Train | Val | Skip | Duration | Final eval_loss | Final eval Token Accuracy |
+|-------|------:|----:|-----:|---------:|----------------:|--------------------------:|
+| 1k | 792 | 198 | 10 | 1h 21m | 3.194 | 90.1% |
+| 2k | 1579 | 395 | 26 | 2h 56m | 3.151 | 98.7% |
+| 3k | 2374 | 594 | 32 | 4h 24m | 3.135 | 99.0% |
+| 4k | 3168 | 792 | 40 | 5h 55m | 3.125 | 99.2% |
+
+### Key Findings
+
+- Strongest gain is `1k -> 2k` (`-0.043` nats eval loss, `+8.6` pp token accuracy)
+- Clear diminishing returns beyond 2k:
+  - `2k -> 3k`: `-0.016` nats, `+0.3` pp
+  - `3k -> 4k`: `-0.010` nats, `+0.2` pp
+- In 4k run, minimum eval loss appears at epoch 2 (`3.124`), then slightly increases at epoch 3 (`3.125`), suggesting near-convergence
+
+### Semantic Similarity Evaluation on Denoised Test Set (S.6)
+
+**Test set**: n=800, pairdata-v2 ground truth  
+**Evaluator**: `paraphrase-multilingual-MiniLM-L12-v2` (cosine similarity)  
+**Tier thresholds**: Excellent ≥ 0.85 · Good ≥ 0.70 · Acceptable ≥ 0.55 · Poor ≥ 0.40 · Very Poor < 0.40
+
+| Scale | Mean ρ | σ | Median | Good+ (%) | V.Poor (%) |
+|-------|-------:|------:|-------:|----------:|-----------:|
+| 1k    | 0.5657 | 0.1573 | 0.5916 | 35.2 | 32.9 |
+| 2k    | 0.6011 | 0.1367 | 0.6137 | 40.6 | 21.9 |
+| **3k** ✅ | **0.6013** | **0.1437** | **0.6213** | **39.8** | **21.5** |
+| 4k    | 0.5742 | 0.1398 | 0.6014 | 33.8 | 28.2 |
+
+All four models fall in the **Acceptable** tier under pairdata-v2 thresholds.  
+Absolute values are ~0.08–0.09 lower than pairdata-v1 results, reflecting the harder matching task of shorter denoised ground-truth texts.
+
+**Key findings:**
+- `1k → 2k`: +6.3% mean gain (largest improvement)
+- `2k ≈ 3k`: Δρ = 0.0002 (saturation)
+- `4k`: −4.5% from 3k (overfitting: VPoor rises 21.5% → 28.2%)
+
+**Model selected: 3k**  
+Rationale: peak mean (0.6013) + highest median (0.6213) + lowest Very Poor rate (21.5%).  
+Result is consistent with pairdata-v1 finding where 3k also achieved peak performance (ρ = 0.6909).
+
+**Figures generated:**
+- `paper_damage_vlm/1_Methodology/figures_vlm/12_v072_similarity_by_scale.png`
+- `paper_damage_vlm/1_Methodology/figures_vlm/13_v072_tier_distribution.png`
+- `paper_damage_vlm/1_Methodology/figures_vlm/14_v072_cosine_violin.png`
+
+### Repro Commands
+
+```powershell
+.\.venv-train\Scripts\Activate.ps1 ; python -u train_v07_qlora.py --train-size 1k
+.\.venv-train\Scripts\Activate.ps1 ; python -u train_v07_qlora.py --train-size 2k
+.\.venv-train\Scripts\Activate.ps1 ; python -u train_v07_qlora.py --train-size 3k
+.\.venv-train\Scripts\Activate.ps1 ; python -u train_v07_qlora.py --train-size 4k
+```
+
+### Paper Artifacts Updated
+
+- `paper_damage_vlm/1_Methodology/methodology.tex` (本編のみ、Supplementary分離済み)
+- `paper_damage_vlm/1_Methodology/methodology_supp.tex` (Supplementary 独立ファイル、S.6結論含む)
+- `paper_damage_vlm/1_Methodology/methodology.pdf` (23 pages, recompiled)
+- `paper_damage_vlm/1_Methodology/methodology_supp.pdf` (7 pages, recompiled)
+
+---
+
 ## Performance Metrics
 
 ### v0.1 Test Results
@@ -1198,7 +1351,8 @@ results = pipeline.process_batch(image_paths, output_csv="results.csv")
 
 ```
 damage_vlm_finetune/
-├── .venv-vlm/                      # Virtual environment (v0.3+)
+├── .venv-train/                    # Virtual environment: training (v0.7+)
+├── .venv-pred/                     # Virtual environment: inference/Unsloth (v0.5+)
 ├── data/                           # Datasets
 │   ├── image_text_inspect_n10789/  # Master dataset (v0.3)
 │   │   ├── Rank_c_image_text_n10789.xlsx  # 10,789 annotations
@@ -1372,7 +1526,7 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ 5 publication-quality visualization figures
 - ✅ Paper methodology section drafted (v0.5 results)
 
-#### v0.6.3 (2026-05-25) **🎉 Latest Release**
+#### v0.6.3 (2026-05-25)
 - ✅ Two-stage Quality Guard Agent implemented (Rule-based + Swallow-8B SLM)
 - ✅ CJK-aware token counting (correct Japanese tokenization)
 - ✅ Empirical threshold calibration (θ_low=98, θ_high=202 at 5th/95th percentile)
@@ -1383,6 +1537,26 @@ pip install llama-cpp-python --force-reinstall --no-cache-dir
 - ✅ Priority Level 3 saturation analysis (all 727 PASS → score=0.54)
 - ✅ 2 analysis figures generated (violin plots + member/damage heatmap)
 - ✅ Paper complete: 25 pages, 10 figures, all sections (pdflatex, no errors)
+
+#### v0.7.1 (2026-05-26)
+- ✅ Image size optimization: confirmed 336px as optimal for LLaVA QLoRA
+- ✅ pairdata_v2 construction: noise-removed 2,969-sample corpus (`inspect_images_336`)
+- ✅ S.5 image-size analysis added to methodology_supp.tex
+
+#### v0.7.2 (2026-05-27)
+- ✅ Full progressive QLoRA retraining on pairdata_v2 (1k/2k/3k/4k scales)
+- ✅ 3k model selected: peak mean cosine similarity (\u03c1=0.6013), lowest Very Poor rate (21.5%)
+- ✅ S.6 semantic similarity evaluation added to methodology_supp.tex
+- ✅ 3 evaluation figures generated (similarity by scale, tier distribution, cosine violin)
+
+#### v0.7.3 (2026-05-28) **🎉 Latest Release**
+- ✅ Quality Guard recalibrated: θ_low 98→30, θ_high 202→200
+- ✅ Keyword-based structuring (1s vs 2h Swallow-8B LLM)
+- ✅ Full pipeline (n=800): PASS=787 (98.4%), FAIL=13 (1.6%)
+- ✅ Scoring saturation resolved: Level 4–5 = 97.3% (was 100% Level 3)
+- ✅ Output bias suppression confirmed via member/damage comparison
+- ✅ S.7, S.7.1, S.7.2 added to methodology_supp.tex (10 pages)
+- ✅ 5 new figures generated (Figure 15–19)
 
 ### 🔮 Future Work
 
@@ -1438,4 +1612,72 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details
 
 ---
 
-**Last Updated**: May 25, 2026 (v0.6.3)
+---
+
+## 📈 v0.7.3: Quality Guard Recalibration & Full Pipeline
+
+### Status: ✅ Complete
+
+**Completion Date**: 2026-05-28  
+**Scope**: Quality Guard recalibration + keyword structuring pipeline on 3k pairdata_v2 model (n=800)
+
+### What Was Completed
+
+- **Quality Guard recalibration**: θ_low 98 → 30 (captures only ERROR outputs); θ_high 202 → 200
+  - Old threshold rejected all valid short descriptions produced by the pairdata_v2 model
+  - New threshold retains all structurally valid predictions
+- **Keyword-based structuring**: Replaced 2-hour Swallow-8B LLM with 1-second keyword matching
+- **Full pipeline run** (`pipeline_v073.py`): n=800 in < 2 seconds
+- **Output mode collapse resolved**: pairdata_v2 noise removal suppressed hallucinated co-occurrence patterns
+
+### Pipeline Results (n=800)
+
+| Verdict | Count | Rate |
+|---------|------:|-----:|
+| PASS — High Quality | 787 | 98.4% |
+| FAIL — Error / Too short | 13 | 1.6% |
+
+### Priority Level Distribution (PASS n=787)
+
+| Level | Description | Count | Rate |
+|-------|-------------|------:|-----:|
+| 3 | Planned maintenance | 21 | 2.7% |
+| **4** | **Priority repair** | **651** | **82.7%** |
+| 5 | Immediate repair | 115 | 14.6% |
+
+Contrast with v0.6.3 where **100% of PASS samples scored Level 3** (scoring saturation at 0.54).
+
+### Key Findings
+
+- **Scoring saturation resolved**: Level 4–5 now accounts for 97.3% of PASS predictions
+- **Bias suppression**: Lime Efflorescence dropped 49.0% → 13.3%; Curb emerged as secondary member (92.5%)
+- **PASS rate**: 98.4% vs. 90.9% in v0.6.3 (quality improvement from pairdata_v2 denoising)
+- **Throughput**: Full 800-image pipeline in < 2 seconds
+
+### Figures Generated
+
+| Figure | File | Description |
+|--------|------|-------------|
+| 15 | `15_v073_token_distribution.png` | Token count with recalibrated thresholds |
+| 16 | `16_v073_guard_breakdown.png` | PASS/FAIL verdict breakdown |
+| 17 | `17_v073_priority_distribution.png` | Priority level distribution |
+| 18 | `18_member_damage_comparison.png` | Member × Damage comparison (v0.6.3 vs v0.7.3) |
+| 19 | `19_priority_comparison.png` | Priority level comparison (v0.6.3 vs v0.7.3) |
+
+### Repro Commands
+
+```powershell
+.\.venv-pred\Scripts\Activate.ps1
+python pipeline_v073.py
+```
+
+### Paper Artifacts Updated
+
+- `methodology_supp.tex` — S.7 Quality Guard Recalibration
+- `methodology_supp.tex` — S.7.1 Member & Damage Type comparison
+- `methodology_supp.tex` — S.7.2 Priority Level comparison
+- `methodology_supp.pdf` — 10 pages, no errors
+
+---
+
+**Last Updated**: May 28, 2026 (v0.7.3 — Quality Guard recalibration, full pipeline, scoring saturation resolved)

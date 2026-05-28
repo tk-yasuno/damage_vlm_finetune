@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-27T04:26:34.437646",
+    "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "n_samples": 5,
+    "device": "cuda"
+  },
+  "overall_metrics": {
+    "cosine_similarity": {
+      "mean": 0.5514323115348816,
+      "std": 0.08473624289035797,
+      "median": 0.5726406574249268,
+      "min": 0.41012609004974365,
+      "max": 0.6426131725311279,
+      "q25": 0.5077880024909973,
+      "q75": 0.6239935755729675
+    },
+    "euclidean_distance": {
+      "mean": 0.9430965185165405,
+      "std": 0.0877736285328865,
+      "median": 0.9245099425315857
+    },
+    "manhattan_distance": {
+      "mean": 14.545605659484863,
+      "std": 1.388888955116272,
+      "median": 14.232397079467773
+    }
+  },
+  "quality_distribution": {
+    "excellent": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "good": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "acceptable": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "poor": {
+      "count": 4,
+      "percentage": 80.0
+    },
+    "very_poor": {
+      "count": 1,
+      "percentage": 20.0
+    }
+  },
+  "per_sample_results": [
+    {
+      "image_id": "10000_釣山橋_PIC026",
+      "cosine_similarity": 0.5726406574249268,
+      "euclidean_distance": 0.9245099425315857,
+      "manhattan_distance": 14.232397079467773,
+      "ground_truth_length": 32,
+      "prediction_length": 152
+    },
+    {
+      "image_id": "06-1-004-01_滝橋_PIC002",
+      "cosine_similarity": 0.6426131725311279,
+      "euclidean_distance": 0.8454428911209106,
+      "manhattan_distance": 12.915897369384766,
+      "ground_truth_length": 127,
+      "prediction_length": 176
+    },
+    {
+      "image_id": "09-3-005-01_潟上橋_PIC044",
+      "cosine_similarity": 0.5077880024909973,
+      "euclidean_distance": 0.9921814203262329,
+      "manhattan_distance": 15.822990417480469,
+      "ground_truth_length": 44,
+      "prediction_length": 235
+    },
+    {
+      "image_id": "17-3-054-01_小川橋_PIC006",
+      "cosine_similarity": 0.6239935755729675,
+      "euclidean_distance": 0.8671866655349731,
+      "manhattan_distance": 13.291263580322266,
+      "ground_truth_length": 91,
+      "prediction_length": 180
+    },
+    {
+      "image_id": "12-3-002-01_仁光寺橋_PIC004",
+      "cosine_similarity": 0.41012609004974365,
+      "euclidean_distance": 1.0861619710922241,
+      "manhattan_distance": 16.465482711791992,
+      "ground_truth_length": 163,
+      "prediction_length": 185
+    }
+  ]
+}

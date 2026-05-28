@@ -18,6 +18,15 @@ from datetime import datetime
 from tqdm import tqdm
 import pandas as pd
 
+# Import unsloth early when available so patching occurs before model loading.
+try:
+    import unsloth  # noqa: F401
+except Exception:
+    unsloth = None
+
+# Unsloth + Windows + Triton の不安定なコンパイル経路を既定で無効化。
+os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
+
 # Check if required libraries are installed
 try:
     from transformers import (
@@ -44,7 +53,8 @@ class LLaVAQLoRAInferenceOptimized:
         base_model_id: str = "llava-hf/llava-1.5-7b-hf",
         device: str = "cuda",
         load_in_4bit: bool = True,
-        use_compile: bool = True
+        use_compile: bool = True,
+        use_unsloth: bool = False
     ):
         """
         Initialize inference model
@@ -61,6 +71,7 @@ class LLaVAQLoRAInferenceOptimized:
         self.device = device if torch.cuda.is_available() else "cpu"
         self.load_in_4bit = load_in_4bit
         self.use_compile = use_compile
+        self.use_unsloth = use_unsloth
         
         print(f"\n🔧 Initializing LLaVA QLoRA Inference (v0.5.1 Optimized)")
         print(f"   Model Dir: {model_dir}")
@@ -68,6 +79,7 @@ class LLaVAQLoRAInferenceOptimized:
         print(f"   Device: {self.device}")
         print(f"   4-bit Quantization: {load_in_4bit}")
         print(f"   torch.compile: {use_compile}")
+        print(f"   Unsloth FastVision: {use_unsloth}")
         
         # Load model and processor
         self._load_model()
@@ -75,6 +87,38 @@ class LLaVAQLoRAInferenceOptimized:
     
     def _load_model(self):
         """Load base model with QLoRA adapters and apply torch.compile()"""
+        if self.use_unsloth:
+            print("Loading base model with Unsloth FastVisionModel...")
+            from unsloth import FastVisionModel
+
+            base_model, _ = FastVisionModel.from_pretrained(
+                model_name=self.base_model_id,
+                load_in_4bit=self.load_in_4bit,
+                use_gradient_checkpointing=False,
+            )
+
+            print("Loading LoRA adapters...")
+            self.model = PeftModel.from_pretrained(
+                base_model,
+                self.model_dir,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            )
+            self.model.eval()
+            # for_inference() を必ず呼ぶ (v0.6.3 と同じ方式: バッチ推論に必須)
+            try:
+                FastVisionModel.for_inference(self.model)
+            except Exception as e:
+                print(f"⚠️  FastVisionModel.for_inference failed: {e}")
+                print("   Continuing without for_inference() optimization")
+
+            print("Loading processor...")
+            self.processor = AutoProcessor.from_pretrained(self.base_model_id)
+            # left-padding: バッチ内の各シーケンス右端(生成開始位置)を揃える (v0.6.3 準拠)
+            self.processor.tokenizer.padding_side = "left"
+            if self.processor.tokenizer.pad_token is None:
+                self.processor.tokenizer.pad_token = self.processor.tokenizer.eos_token
+            return
+
         # Quantization config
         if self.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
@@ -118,7 +162,7 @@ class LLaVAQLoRAInferenceOptimized:
         
         # Load processor
         print("Loading processor...")
-        self.processor = AutoProcessor.from_pretrained(self.model_dir)
+        self.processor = AutoProcessor.from_pretrained(self.base_model_id)
     
     def predict_single(
         self,
@@ -454,6 +498,11 @@ def main():
         help="Disable torch.compile() optimization"
     )
     parser.add_argument(
+        "--use-unsloth",
+        action="store_true",
+        help="Use Unsloth FastVisionModel backend for faster inference"
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -503,7 +552,8 @@ def main():
     inferencer = LLaVAQLoRAInferenceOptimized(
         model_dir=args.model_dir,
         base_model_id=args.base_model,
-        use_compile=not args.no_compile
+        use_compile=not args.no_compile,
+        use_unsloth=args.use_unsloth
     )
     
     # Run inference

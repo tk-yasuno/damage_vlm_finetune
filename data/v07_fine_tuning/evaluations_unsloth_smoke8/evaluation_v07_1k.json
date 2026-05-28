@@ -1,0 +1,181 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-27T04:33:23.171188",
+    "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "n_samples": 16,
+    "device": "cuda"
+  },
+  "overall_metrics": {
+    "cosine_similarity": {
+      "mean": 0.5583910942077637,
+      "std": 0.16687464714050293,
+      "median": 0.5987377166748047,
+      "min": 0.2759575843811035,
+      "max": 0.8113651275634766,
+      "q25": 0.4048708975315094,
+      "q75": 0.69056236743927
+    },
+    "euclidean_distance": {
+      "mean": 0.9221854209899902,
+      "std": 0.18108505010604858,
+      "median": 0.8953630924224854
+    },
+    "manhattan_distance": {
+      "mean": 14.2791748046875,
+      "std": 2.8273565769195557,
+      "median": 13.798583030700684
+    }
+  },
+  "quality_distribution": {
+    "excellent": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "good": {
+      "count": 2,
+      "percentage": 12.5
+    },
+    "acceptable": {
+      "count": 5,
+      "percentage": 31.25
+    },
+    "poor": {
+      "count": 3,
+      "percentage": 18.75
+    },
+    "very_poor": {
+      "count": 6,
+      "percentage": 37.5
+    }
+  },
+  "per_sample_results": [
+    {
+      "image_id": "10000_釣山橋_PIC026",
+      "cosine_similarity": 0.5726407766342163,
+      "euclidean_distance": 0.9245099425315857,
+      "manhattan_distance": 14.232397079467773,
+      "ground_truth_length": 32,
+      "prediction_length": 152
+    },
+    {
+      "image_id": "06-1-004-01_滝橋_PIC002",
+      "cosine_similarity": 0.6814123392105103,
+      "euclidean_distance": 0.7982327938079834,
+      "manhattan_distance": 12.246108055114746,
+      "ground_truth_length": 127,
+      "prediction_length": 190
+    },
+    {
+      "image_id": "09-3-005-01_潟上橋_PIC044",
+      "cosine_similarity": 0.3533364236354828,
+      "euclidean_distance": 1.1372454166412354,
+      "manhattan_distance": 18.059070587158203,
+      "ground_truth_length": 44,
+      "prediction_length": 158
+    },
+    {
+      "image_id": "17-3-054-01_小川橋_PIC006",
+      "cosine_similarity": 0.6500180959701538,
+      "euclidean_distance": 0.8366383910179138,
+      "manhattan_distance": 12.983427047729492,
+      "ground_truth_length": 91,
+      "prediction_length": 172
+    },
+    {
+      "image_id": "12-3-002-01_仁光寺橋_PIC004",
+      "cosine_similarity": 0.4101261496543884,
+      "euclidean_distance": 1.0861619710922241,
+      "manhattan_distance": 16.46548080444336,
+      "ground_truth_length": 163,
+      "prediction_length": 185
+    },
+    {
+      "image_id": "13-3-001-02_干見折本橋_PIC026",
+      "cosine_similarity": 0.7909353971481323,
+      "euclidean_distance": 0.6466291546821594,
+      "manhattan_distance": 10.360055923461914,
+      "ground_truth_length": 47,
+      "prediction_length": 167
+    },
+    {
+      "image_id": "18-3-086-01_大峠橋_PIC011",
+      "cosine_similarity": 0.5220330953598022,
+      "euclidean_distance": 0.9777186512947083,
+      "manhattan_distance": 14.95827865600586,
+      "ground_truth_length": 171,
+      "prediction_length": 163
+    },
+    {
+      "image_id": "19-1-222-02_下谷橋_PIC005",
+      "cosine_similarity": 0.2759575843811035,
+      "euclidean_distance": 1.2033640146255493,
+      "manhattan_distance": 18.842227935791016,
+      "ground_truth_length": 32,
+      "prediction_length": 163
+    },
+    {
+      "image_id": "04-3-080-01_宮野中央住吉線１号橋_PIC005",
+      "cosine_similarity": 0.6966270208358765,
+      "euclidean_distance": 0.778938889503479,
+      "manhattan_distance": 11.874295234680176,
+      "ground_truth_length": 49,
+      "prediction_length": 179
+    },
+    {
+      "image_id": "05-1-007-01_古熊下橋_PIC039",
+      "cosine_similarity": 0.8113651275634766,
+      "euclidean_distance": 0.6142227649688721,
+      "manhattan_distance": 9.521598815917969,
+      "ground_truth_length": 136,
+      "prediction_length": 171
+    },
+    {
+      "image_id": "19-2-436-02_滝の下橋_PIC006",
+      "cosine_similarity": 0.40796756744384766,
+      "euclidean_distance": 1.0881474018096924,
+      "manhattan_distance": 16.90973663330078,
+      "ground_truth_length": 30,
+      "prediction_length": 190
+    },
+    {
+      "image_id": "18-1-132-03_真名子橋_PIC084",
+      "cosine_similarity": 0.6248346567153931,
+      "euclidean_distance": 0.8662161827087402,
+      "manhattan_distance": 13.364768981933594,
+      "ground_truth_length": 94,
+      "prediction_length": 190
+    },
+    {
+      "image_id": "18-3-005-01_須崎橋_PIC012",
+      "cosine_similarity": 0.34342533349990845,
+      "euclidean_distance": 1.1459271907806396,
+      "manhattan_distance": 17.75323486328125,
+      "ground_truth_length": 35,
+      "prediction_length": 205
+    },
+    {
+      "image_id": "18-1-104-17_高明橋_PIC007",
+      "cosine_similarity": 0.39558085799217224,
+      "euclidean_distance": 1.0994718074798584,
+      "manhattan_distance": 16.98120880126953,
+      "ground_truth_length": 49,
+      "prediction_length": 185
+    },
+    {
+      "image_id": "19-2-541-01_赤松橋_PIC001",
+      "cosine_similarity": 0.6885408163070679,
+      "euclidean_distance": 0.7892518043518066,
+      "manhattan_distance": 12.121965408325195,
+      "ground_truth_length": 62,
+      "prediction_length": 179
+    },
+    {
+      "image_id": "07-1-003-02__PIC018",
+      "cosine_similarity": 0.7094566822052002,
+      "euclidean_distance": 0.7622904181480408,
+      "manhattan_distance": 11.792945861816406,
+      "ground_truth_length": 241,
+      "prediction_length": 172
+    }
+  ]
+}

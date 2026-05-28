@@ -6,7 +6,9 @@
 # ============================================================================
 v03_dataset:
   master_excel: "data/image_text_inspect_n10789/Rank_c_image_text_n10789.xlsx"
-  image_dir: "data/image_text_inspect_n10789/rank_c_images_n10789"
+  image_dir: "data/inspect_images_336"  # 336x336 center-crop (LLaVA-1.5 native resolution)
+  # image_dir: "data/inspect_images_448"   # 448x448 alternative
+  # image_dir: "data/inspect_images_v2"    # max 1024px long side (original resize)
   v02_detail_csv: "llava_quantization_comparison_detail.csv"
   output_dir: "data/v03_fine_tuning"
   
@@ -109,8 +111,9 @@ v04_fine_tuning:
     lr_scheduler_type: "cosine"
     
     # Mixed precision
-    fp16: true
-    bf16: false
+    # RTX 4060 Ti supports BF16 natively; fp16 GradScaler is incompatible with 4-bit QLoRA BFloat16 tensors
+    fp16: false
+    bf16: true
     
     # Logging and checkpointing
     logging_steps: 10
@@ -122,7 +125,9 @@ v04_fine_tuning:
   data:
     max_seq_length: 2048
     train_split: 0.8
-    image_base_dir: "data/image_text_inspect_n10789/rank_c_images_n10789"
+    image_base_dir: "data/inspect_images_336"  # 336x336 center-crop (LLaVA-1.5 native resolution)
+    # image_base_dir: "data/inspect_images_448"   # 448x448 alternative
+    # image_base_dir: "data/inspect_images_v2"    # max 1024px long side
   
   # Output directories
   output:
@@ -176,6 +181,42 @@ v06_paper:
     dpi: 300
     format: "png"
     style: "seaborn-v0_8-paper"
+
+# ============================================================================
+# v0.7: Denoised Dataset (pairdata_v2)
+# ============================================================================
+v07_dataset:
+  output_dir: "data/v07_fine_tuning"
+  note: "pairdata_v2 — out-of-scope sentences removed from 所見 ground truth"
+
+  # Noise removal patterns applied sentence-level to 所見 field
+  noise_removal:
+    temporal_patterns:             # Category A: requires 2+ images / time points
+      - '前回(より|から|の|点検|調査)'
+      - '前年(より|から|の)'
+      - '経時(的|変化)'
+      - '新たに.{0,15}(発生|出現)'
+    maintenance_patterns:          # Category B: requires bridge attribute metadata
+      - '補修(が|を|は)?(必要|要する|望ましい|検討)'
+      - '予防保全'
+      - '対策(が|を)?(必要|要する|講じ)'
+      - '措置(が|を)?(必要|要する)'
+      - '経過観察(が|を)?(必要|要する)'
+      - '早(期|急)に.{0,15}(補修|対策|措置|点検|確認)'
+      - '維持管理計画'
+      - '補修工法|補修方法'
+
+  # Sampling settings (same as v0.3 for reproducibility)
+  test_size: 800
+  train_sizes: [1000, 2000, 3000, 4000]
+  random_seed: 42
+
+  # Fine-tuned model output directories
+  model_dirs:
+    1k: "models/llava_v07_qlora_1k"
+    2k: "models/llava_v07_qlora_2k"
+    3k: "models/llava_v07_qlora_3k"
+    4k: "models/llava_v07_qlora_4k"
 
 # ============================================================================
 # General Settings

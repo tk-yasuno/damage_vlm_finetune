@@ -17,8 +17,8 @@ Complete workflow for progressive VLM fine-tuning from dataset preparation to pa
 ### Step 1: Prepare Train/Test Datasets
 
 ```powershell
-# Activate virtual environment
-.\.venv-vlm\Scripts\Activate.ps1
+# Activate virtual environment (training)
+.\.venv-train\Scripts\Activate.ps1
 
 # Run dataset preparation
 python prepare_v03_dataset.py
